@@ -1,6 +1,7 @@
 """Profile registry: login data never travels between profiles."""
 import json, os, uuid
 from pathlib import Path
+from safe_io import atomic_write, private_dir, parse_json
 SUPPORT = Path.home() / 'Library/Application Support'
 LEGACY = SUPPORT / 'ClaudeThreeDesktop'
 ROOT = LEGACY if (LEGACY / 'profiles.json').exists() else SUPPORT / 'ClaudeHarbor'
@@ -10,30 +11,37 @@ def defaults():
     return []
 
 def load():
-    if REGISTRY.exists():
-        profiles=json.loads(REGISTRY.read_text())['profiles']
-    else: profiles=defaults()
+    if not REGISTRY.exists(): return []
+    data = parse_json(REGISTRY.read_bytes(), REGISTRY)
+    if not isinstance(data, dict) or data.get('version', 1) != 1 or not isinstance(data.get('profiles'), list):
+        raise ValueError('Registry schema không được hỗ trợ')
+    profiles = data['profiles']; seen = set()
     for p in profiles:
-        if not p['id'].replace('-','').isalnum(): raise ValueError('Profile ID không hợp lệ')
+        if not isinstance(p, dict) or not isinstance(p.get('id'), str) or not p['id'].replace('-', '').isalnum():
+            raise ValueError('Profile ID không hợp lệ')
+        if p['id'] in seen: raise ValueError('Profile ID trùng lặp')
+        seen.add(p['id'])
+        if 'syncEnabled' in p and not isinstance(p['syncEnabled'], bool): raise ValueError('Invalid sync selection')
+        if 'kind' in p and p['kind'] not in ('claude', 'magpie'): raise ValueError('Invalid profile kind')
     return profiles
 
+
 def save(profiles):
-    ROOT.mkdir(parents=True,exist_ok=True)
-    temp=REGISTRY.with_suffix('.tmp-'+uuid.uuid4().hex)
-    temp.write_text(json.dumps({'version':1,'profiles':profiles},ensure_ascii=False,indent=2)+'\n')
-    temp.chmod(0o600); os.replace(temp,REGISTRY)
+    private_dir(ROOT)
+    if REGISTRY.exists(): atomic_write(ROOT/'profiles.previous.json', REGISTRY.read_bytes())
+    atomic_write(REGISTRY, (json.dumps({'version':1,'profiles':profiles},ensure_ascii=False,indent=2)+'\n').encode())
 
 def gui(p): return ROOT/'profiles'/p['id']/('gui-3p' if p['kind']=='magpie' else 'gui')
 
 def account(p):
     g=gui(p); config=g/'config.json'
-    data=json.loads(config.read_text()) if config.exists() else {}
+    data=parse_json(config.read_bytes(), config) if config.exists() else {}
     current=data.get('lastKnownAccountUuid')
     legacy=p.get('legacyAccount')
     if legacy:
         f=Path.home()/'.config/magpie/claude-accounts'/legacy/'.claude.json'
         if f.exists():
-            a=json.loads(f.read_text()).get('oauthAccount',{})
+            a=parse_json(f.read_bytes(), f).get('oauthAccount',{})
             if current and current!=a.get('accountUuid'): legacy=None
             else:
                 return g/'claude-code-sessions'/str(uuid.UUID(a['accountUuid']))/str(uuid.UUID(a['organizationUuid']))

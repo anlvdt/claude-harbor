@@ -3,9 +3,12 @@
 import json
 import fcntl
 import os
+import time
 from pathlib import Path
 import sys
 import profile_store as store
+import sync_transaction
+import profile_health
 
 ROOT = store.ROOT
 
@@ -40,14 +43,41 @@ def environment(profile):
     return env
 
 
+def prepare_lease(lock):
+    fcntl.flock(lock, fcntl.LOCK_SH)
+    os.set_inheritable(lock.fileno(), True)
+
+
+def keep_lease_until_exit(lock):
+    # A child retains the shared lock across the parent's exec and Electron startup.
+    # Keeping LaunchServices' original PID preserves Dock/termination behavior.
+    parent = os.getpid()
+    child = os.fork()
+    if child == 0:
+        try:
+            while os.getppid() == parent:
+                time.sleep(0.1)
+        finally:
+            os._exit(0)
+    os.set_inheritable(lock.fileno(), False)
+
+
 def main():
     profile, bundle = sys.argv[1:3]
-    if profile not in {p['id'] for p in store.load()}:
-        raise SystemExit('Unknown desktop profile')
+    selected=next((p for p in store.load() if p['id']==profile),None)
+    if selected is None or Path(bundle)!=Path(selected['bundle']):
+        raise SystemExit('Unknown desktop profile or bundle')
     # Wait while the one-click synchronizer is updating profile state.
-    # This descriptor closes at exec, before Electron starts.
+    # A keeper holds this lease until the launched app exits, even during exec.
     sync_lock = (ROOT / 'sync.lock').open('a')
-    fcntl.flock(sync_lock, fcntl.LOCK_SH)
+    prepare_lease(sync_lock)
+    if sync_transaction.pending(ROOT):
+        raise SystemExit('Incomplete sync: close profiles and run manager.py recover before launching.')
+    repair=ROOT/'clone-repair.json'
+    if repair.exists() and json.loads(repair.read_text()).get('state')=='active':
+        raise SystemExit('Incomplete clone repair: run manager.py repair for the affected profile.')
+    issues=[i for i in profile_health.inspect_profile(selected) if i['blocking']]
+    if issues: raise SystemExit(issues[0]['detail'])
     binary = Path(bundle) / 'Contents/MacOS/Claude.bin'
     env = environment(profile)
     log_path = ROOT / 'profiles' / profile / 'startup.log'
@@ -57,6 +87,7 @@ def main():
     os.close(fd)
     # Preserve arguments delivered to the profile by LaunchServices.
     args = [str(binary), '--user-data-dir=' + str(ROOT / 'profiles' / profile / 'gui'), *sys.argv[3:]]
+    keep_lease_until_exit(sync_lock)
     os.execve(str(binary), args, env)
 
 
