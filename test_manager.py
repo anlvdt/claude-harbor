@@ -55,7 +55,7 @@ class RuntimeTests(unittest.TestCase):
                 bootstrap.install_runtime(source)
                 self.assertEqual(store.load(),[])
                 self.assertFalse((destination/'profiles').exists())
-                self.assertEqual((destination/'manager.py').read_text(),'bundled manager.py')
+                self.assertEqual((destination/'runtimes'/json.loads((destination/'current-runtime.json').read_text())['generation']/'manager.py').read_text(),'bundled manager.py')
     def test_runtime_update_preserves_profile_registry_and_history(self):
         import bootstrap
         with tempfile.TemporaryDirectory() as temp:

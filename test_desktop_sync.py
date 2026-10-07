@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import copy, importlib.util, json, tempfile, unittest, uuid
 from pathlib import Path
 spec = importlib.util.spec_from_file_location('sync', Path(__file__).with_name('desktop_sync.py'))
@@ -6,6 +7,10 @@ sync = importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
 class SyncTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); sync.ROOT = Path(self.temp.name)
+        self.home_patch = patch.object(Path, 'home', return_value=sync.ROOT/'home')
+        self.home_patch.start(); self.addCleanup(self.home_patch.stop)
+        sync.EXTERNAL_TARGETS = {}
+        sync.inventory.EXTERNAL.clear(); sync.inventory.TRANSCRIPTS.clear()
         sync.HISTORY_ROOTS = []; sync.DESKTOP_ROOTS = []
         sync.live_cli_ids = lambda: {}
         sync.running_profiles = lambda: []
@@ -86,6 +91,7 @@ class SyncTests(unittest.TestCase):
     def test_external_transcript_and_desktop_title_are_imported(self):
         external = Path(self.temp.name)/'original-code'; desktop=Path(self.temp.name)/'original-desktop'
         sync.HISTORY_ROOTS = [external]; sync.DESKTOP_ROOTS = [desktop]
+        sync.EXTERNAL_TARGETS = {str(external): list(sync.NAMES)}
         self.file.rename(external/'projects/-test'/self.file.name) if (external/'projects/-test').exists() else None
         if self.file.exists():
             (external/'projects/-test').mkdir(parents=True); self.file.rename(external/'projects/-test'/self.file.name)

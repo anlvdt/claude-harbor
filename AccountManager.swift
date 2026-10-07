@@ -3,28 +3,75 @@ import Foundation
 
 struct Profile: Decodable, Sendable {
     let id: String; let name: String; let kind: String; let bundle: String; let bundleID: String
-    let ready: Bool; let running: Bool; let sessions: Int; let archived: Int
+    let ready: Bool; let running: Bool; let syncEnabled: Bool; let sessions: Int; let archived: Int
 }
 struct Summary: Decodable { let profiles: [Profile]; let pending: [String]; let lastSync: Report? }
 struct Check: Decodable { let busy: [String]; let errors: [String]; let running: [String]; let eligible: [String]; let pending: [String] }
 struct Report: Decodable { let profiles: Int; let sessions: Int; let newBranches: Int; let filesChanged: Int; let backup: String; let warnings: Int?; let pending: [String]? }
+struct HealthIssue: Decodable { let profile: String?; let code: String; let detail: String; let blocking: Bool }
+struct HealthReport: Decodable { let issues: [HealthIssue]; let ok: Bool }
 struct BackendResult: Sendable { let status: Int32; let data: Data; let error: String }
 let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
 let legacyRoot = support.appendingPathComponent("ClaudeThreeDesktop")
 let root = FileManager.default.fileExists(atPath: legacyRoot.appendingPathComponent("profiles.json").path) ? legacyRoot : support.appendingPathComponent("ClaudeHarbor")
 
-func executePython(_ arguments: [String]) async throws -> Data {
+final class BackendCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffers = [Data(), Data()]
+    private var failure: String?
+    private var finished = false
+    let process = Process()
+    func append(_ data: Data, stream: Int, limit: Int) {
+        lock.lock()
+        let exceeded = buffers[stream].count + data.count > limit
+        if !exceeded { buffers[stream].append(data) }
+        lock.unlock()
+        if exceeded { stop("Backend output exceeded its limit; recovery may be required.") }
+    }
+    func stop(_ message: String) {
+        lock.lock(); if finished { lock.unlock(); return }; if failure == nil { failure = message }; lock.unlock()
+        if process.isRunning {
+            process.terminate()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [self] in
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            }
+        }
+    }
+    func result() -> BackendResult {
+        lock.lock(); defer { lock.unlock() }; finished = true
+        return BackendResult(status: failure == nil ? process.terminationStatus : -1,
+                             data: buffers[0], error: failure ?? String(decoding: buffers[1], as: UTF8.self))
+    }
+}
+
+func executePython(_ arguments: [String], timeout: TimeInterval = 600) async throws -> Data {
     let result: BackendResult = try await withCheckedThrowingContinuation { continuation in
-        let process = Process(); let output = Pipe(); let errors = Pipe()
+        let capture = BackendCapture(); let process = capture.process
+        let output = Pipe(); let errors = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = arguments
         process.standardOutput = output; process.standardError = errors
-        process.terminationHandler = { finished in
-            continuation.resume(returning: BackendResult(status: finished.terminationStatus,
-                data: output.fileHandleForReading.readDataToEndOfFile(),
-                error: String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)))
+        do { try process.run() } catch { continuation.resume(throwing: error); return }
+        output.fileHandleForWriting.closeFile(); errors.fileHandleForWriting.closeFile()
+        let readers = DispatchGroup()
+        for (index, handle) in [output.fileHandleForReading, errors.fileHandleForReading].enumerated() {
+            readers.enter()
+            DispatchQueue.global().async {
+                defer { handle.closeFile(); readers.leave() }
+                while true {
+                    let data = handle.readData(ofLength: 65536)
+                    if data.isEmpty { break }
+                    capture.append(data, stream: index, limit: index == 0 ? 8 * 1024 * 1024 : 1024 * 1024)
+                }
+            }
         }
-        do { try process.run() } catch { continuation.resume(throwing: error) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak capture] in
+            capture?.stop("Backend timed out; the next sync will recover unfinished writes.")
+        }
+        DispatchQueue.global().async {
+            process.waitUntilExit(); readers.wait()
+            continuation.resume(returning: capture.result())
+        }
     }
     guard result.status == 0 else { throw NSError(domain: "ClaudeHarbor", code: Int(result.status), userInfo: [NSLocalizedDescriptionKey: result.error]) }
     return result.data
@@ -39,7 +86,7 @@ func backend(_ arguments: [String]) async throws -> Data {
     var profiles: [Profile] = []
     let status = NSTextField(wrappingLabelWithString: "Đang đọc các profile…")
     let footer = NSTextField(wrappingLabelWithString: "")
-    let sync = NSButton(title: "Đồng bộ tất cả", target: nil, action: nil)
+    let sync = NSButton(title: "Đồng bộ đã chọn", target: nil, action: nil)
     let add = NSButton(title: "+ Thêm tài khoản", target: nil, action: nil)
     let openAll = NSButton(title: "Mở tất cả", target: nil, action: nil)
     let refresh = NSButton(title: "Làm mới", target: nil, action: nil)
@@ -68,12 +115,13 @@ func backend(_ arguments: [String]) async throws -> Data {
         footer.frame = NSRect(x: 28, y: 141, width: 644, height: 35); footer.font = .systemFont(ofSize: 12); footer.textColor = .secondaryLabelColor
         status.frame = NSRect(x: 28, y: 58, width: 644, height: 76); status.font = .systemFont(ofSize: 13)
         sync.frame = NSRect(x: 451, y: 18, width: 220, height: 34); sync.target = self; sync.action = #selector(synchronize); sync.keyEquivalent = "\r"
+        let health = NSButton(title: "Kiểm tra", target: self, action: #selector(showHealth)); health.bezelStyle = .rounded; health.frame = NSRect(x: 205, y: 18, width: 100, height: 34)
         let report = NSButton(title: "Báo cáo & sao lưu", target: self, action: #selector(showReport)); report.bezelStyle = .rounded; report.frame = NSRect(x: 24, y: 18, width: 175, height: 34)
-        for view in [title, subtitle, add, openAll, refresh, scroll, footer, status, sync, report] { window.contentView?.addSubview(view) }
+        for view in [title, subtitle, add, openAll, refresh, scroll, footer, status, sync, report, health] { window.contentView?.addSubview(view) }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = "C≋"
         let quick = NSMenu()
-        for (name, action) in [("Claude Harbor…", #selector(showWindow)), ("Mở tất cả", #selector(openEveryProfile)), ("Đồng bộ tất cả", #selector(synchronize))] {
+        for (name, action) in [("Claude Harbor…", #selector(showWindow)), ("Mở tất cả", #selector(openEveryProfile)), ("Đồng bộ đã chọn", #selector(synchronize))] {
             let entry = quick.addItem(withTitle: name, action: action, keyEquivalent: ""); entry.target = self
         }
         item.menu = quick
@@ -109,23 +157,36 @@ func backend(_ arguments: [String]) async throws -> Data {
                 let text = NSTextField(wrappingLabelWithString: "\(p.name)\n\(p.kind == "magpie" ? "Magpie gateway" : "Tài khoản Claude") · \(p.ready ? "\(p.sessions) phiên Code" : "Chờ đăng nhập / mở tab Code")")
                 text.font = .systemFont(ofSize: 13)
                 let button = NSButton(title: "Mở", target: self, action: #selector(openOne(_:))); button.tag = index; button.bezelStyle = .rounded; button.isEnabled = !working
+                let chosen = NSButton(checkboxWithTitle: "Sync", target: self, action: #selector(selectForSync(_:)))
+                chosen.tag = index; chosen.state = p.syncEnabled ? .on : .off; chosen.isEnabled = !working
+                row.addArrangedSubview(chosen)
                 row.addArrangedSubview(marker); row.addArrangedSubview(text); row.addArrangedSubview(button)
                 row.widthAnchor.constraint(equalToConstant: 620).isActive = true; row.heightAnchor.constraint(equalToConstant: 50).isActive = true
-                marker.widthAnchor.constraint(equalToConstant: 18).isActive = true; text.widthAnchor.constraint(equalToConstant: 493).isActive = true
+                marker.widthAnchor.constraint(equalToConstant: 18).isActive = true; text.widthAnchor.constraint(equalToConstant: 425).isActive = true
                 rows.addArrangedSubview(row)
             }
             rows.frame = NSRect(x: 0, y: 0, width: 620, height: max(193, profiles.count * 60))
             footer.stringValue = "Đồng bộ Code local, gồm phiên cũ và đã lưu trữ. Chat web / Cowork / cloud chưa được hỗ trợ."
             if !working {
-                if let last = summary.lastSync { status.stringValue = "Lần gần nhất: \(last.sessions) phiên trong \(last.profiles) app.\nNhấn Đồng bộ tất cả: chờ trả lời xong → đóng app → sao lưu, đồng bộ → mở lại."
-                } else { status.stringValue = "Thêm tài khoản, đăng nhập trong cửa sổ Claude rồi mở tab Code. Sau đó bấm Đồng bộ tất cả." }
+                if let last = summary.lastSync { status.stringValue = "Lần gần nhất: \(last.sessions) phiên trong \(last.profiles) app.\nChọn ô Sync ở các profile cần chia sẻ. Các app đang chạy sẽ đóng rồi mở lại."
+                } else { status.stringValue = "Thêm tài khoản, đăng nhập trong cửa sổ Claude rồi mở tab Code. Chọn ô Sync ở ít nhất hai profile rồi bấm Đồng bộ đã chọn." }
                 if !summary.pending.isEmpty { status.stringValue += "\n\(summary.pending.count) profile đang chờ khởi tạo Code." }
             }
-            sync.isEnabled = !working && profiles.filter(\.ready).count >= 2
+            sync.isEnabled = !working && profiles.filter { $0.ready && $0.syncEnabled }.count >= 2
         } catch { status.stringValue = error.localizedDescription }
     }
+    @objc func selectForSync(_ sender: NSButton) {
+        guard !working, profiles.indices.contains(sender.tag) else { return }
+        let p = profiles[sender.tag]; let selected = sender.state == .on
+        setWorking(true)
+        Task {
+            do { _ = try await backend(["select", p.id, selected ? "true" : "false"]) }
+            catch { status.stringValue = error.localizedDescription }
+            setWorking(false); await load()
+        }
+    }
     @objc func refreshNow() { guard !working else { return }; Task { await load() } }
-    func open(_ selected: [Profile]) async {
+    @discardableResult func open(_ selected: [Profile]) async -> [String] {
         var failures: [String] = []
         for profile in selected {
             let config = NSWorkspace.OpenConfiguration(); config.activates = selected.count == 1
@@ -135,6 +196,7 @@ func backend(_ arguments: [String]) async throws -> Data {
             if let failure { failures.append(profile.name + ": " + failure) }
         }
         if !failures.isEmpty { status.stringValue = failures.joined(separator: "\n") }
+        return failures
     }
     @objc func openOne(_ sender: NSButton) { guard !working, profiles.indices.contains(sender.tag) else { return }; let p = profiles[sender.tag]; Task { await open([p]); await load() } }
     @objc func openEveryProfile() { guard !working else { return }; Task { await open(profiles); await load() } }
@@ -160,6 +222,22 @@ func backend(_ arguments: [String]) async throws -> Data {
             }
         }
     }
+    @objc func showHealth() {
+        guard !working else { return }
+        setWorking(true)
+        Task {
+            do {
+                let report = try JSONDecoder().decode(HealthReport.self, from: try await backend(["doctor"]))
+                let alert = NSAlert(); alert.messageText = report.ok ? "Kiểm tra hoàn tất" : "Cần xử lý trước khi đồng bộ"
+                alert.informativeText = report.issues.isEmpty ? "Không phát hiện lỗi clone hoặc giao dịch dở dang." : report.issues.map { issue in
+                    let name = profiles.first { $0.id == issue.profile }?.name ?? "Claude Harbor"
+                    return name + ": " + issue.detail
+                }.joined(separator: "\n")
+                await alert.beginSheetModal(for: window)
+            } catch { status.stringValue = error.localizedDescription }
+            setWorking(false)
+        }
+    }
     @objc func showReport() { NSWorkspace.shared.open(root) }
     @objc func synchronize() {
         if waiting { operation?.cancel(); return }; guard !working else { return }
@@ -178,12 +256,12 @@ func backend(_ arguments: [String]) async throws -> Data {
                 status.stringValue = "Chờ trả lời xong: " + check.busy.joined(separator: "; ")
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
-            waiting = false; sync.title = "Đồng bộ tất cả"; sync.isEnabled = false
+            waiting = false; sync.title = "Đồng bộ đã chọn"; sync.isEnabled = false
             try Task.checkCancellation()
-            let selected = profiles.filter { check.eligible.contains($0.id) }
-            let applications = selected.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID) }
-            previous = selected.filter { p in applications.contains { $0.bundleIdentifier == p.bundleID } }
-            status.stringValue = "Đang đóng các bản Claude và lưu phiên…"; closing = true
+            let closingProfiles = profiles.filter { check.running.contains($0.id) }
+            let applications = closingProfiles.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID) }
+            previous = closingProfiles.filter { p in applications.contains { $0.bundleIdentifier == p.bundleID } }
+            status.stringValue = "Đang đóng các bản Claude để khóa dữ liệu; chỉ đồng bộ profile đã chọn…"; closing = true
             for app in applications { _ = app.terminate() }
             for _ in 0..<150 {
                 if applications.allSatisfy(\.isTerminated) { break }; try await Task.sleep(nanoseconds: 200_000_000)
@@ -191,18 +269,20 @@ func backend(_ arguments: [String]) async throws -> Data {
             guard applications.allSatisfy(\.isTerminated) else { throw NSError(domain: "Sync", code: 2, userInfo: [NSLocalizedDescriptionKey: "Một app chưa đóng được; chưa ghi dữ liệu đồng bộ."]) }
             status.stringValue = "Đang sao lưu và đồng bộ toàn bộ lịch sử Code…"
             let report = try JSONDecoder().decode(Report.self, from: try await backend(["sync"]))
-            status.stringValue = "Đang mở lại các app…"; await open(selected)
+            status.stringValue = "Đang mở lại các app…"; let reopenFailures = await open(previous)
             await load()
             status.stringValue = "Đã đồng bộ \(report.sessions) phiên vào \(report.profiles) app. \(report.filesChanged) tệp cập nhật.\(report.newBranches > 0 ? " Giữ thêm \(report.newBranches) nhánh." : "")\nCó bản sao lưu trong Báo cáo & sao lưu."
-            if (report.warnings ?? 0) > 0 { status.stringValue += " Có bản ghi rỗng / thiếu transcript; xem history-audit.json." }
+            if !reopenFailures.isEmpty { status.stringValue += "\nKhông mở lại được: " + reopenFailures.joined(separator: "; ") }
+            if let warnings = report.warnings, warnings > 0 { status.stringValue += " Có \(warnings) cảnh báo; phiên/profile có dữ liệu lỗi được bỏ qua. Xem file và dòng lỗi trong history-audit.json qua Báo cáo & sao lưu." }
             if !(report.pending ?? []).isEmpty { status.stringValue += " \(report.pending!.count) profile chờ đăng nhập / khởi tạo Code." }
         } catch is CancellationError { status.stringValue = "Đã dừng chờ, chưa thay đổi lịch sử."
         } catch {
             if closing { await open(previous) }; status.stringValue = "Chưa hoàn tất: \(error.localizedDescription)"
         }
-        waiting = false; operation = nil; sync.title = "Đồng bộ tất cả"; setWorking(false)
+        waiting = false; operation = nil; sync.title = "Đồng bộ đã chọn"; setWorking(false)
     }
 }
+#if !BACKEND_TEST
 @main struct EntryPoint {
     @MainActor static func main() {
         let app = NSApplication.shared; let delegate = Manager()
@@ -210,3 +290,5 @@ func backend(_ arguments: [String]) async throws -> Data {
         withExtendedLifetime(delegate) { app.run() }
     }
 }
+
+#endif
