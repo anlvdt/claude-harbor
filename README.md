@@ -41,9 +41,15 @@ The release provides an **Apple Silicon (arm64)** app for **macOS 14 or later**.
 4. Open it, choose **+ Thêm tài khoản**, name a profile, then sign in within the new Claude window.
 5. Open the **Code** tab, create a **Local** session, and click **Làm mới** in Harbor. After at least two profiles are ready, select **Sync** on the profiles that may share history, then click **Đồng bộ đã chọn**.
 
-The interface is currently Vietnamese. The release is **ad-hoc signed, not Apple notarized**; macOS may require your explicit approval to open the downloaded app. Building from source is also supported.
+The v0.3.0 download has a Vietnamese interface. The release is **ad-hoc signed, not Apple notarized**; macOS may require your explicit approval to open the downloaded app. Building from source is also supported.
 
 Existing installations from the earlier local prototype are retained in `~/Library/Application Support/ClaudeThreeDesktop`. New installations use `~/Library/Application Support/ClaudeHarbor`.
+
+## Language support in the upcoming v0.4.0
+
+Source builds on `codex/english-ui` add **English and Tiếng Việt**. Choose **Language / Ngôn ngữ → System, English, or Tiếng Việt** from the main menu or menu-bar icon. System selects a supported macOS preferred language, falling back to English. The choice is saved and takes effect immediately while Harbor is idle. Finish the current operation or close its dialog before switching.
+
+Only Harbor-owned interface text is translated. Account names, history content and original reports remain unchanged; macOS-owned dialogs and system errors follow macOS language settings. This update has not been published; the public download above remains v0.3.0.
 
 ## Scope of v0.3.0
 
@@ -78,14 +84,16 @@ Requires Python 3, Swift and Apple Command Line Tools. No third-party Python pac
 ```sh
 git clone https://github.com/anlvdt/claude-harbor.git
 cd claude-harbor
-git checkout v0.3.0
+git checkout codex/english-ui  # upcoming 0.4.0; use v0.3.0 for the published source
 python3 -m unittest discover -s . -p 'test*.py'
-swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o /tmp/HarborBackendTests
+swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o /tmp/HarborBackendTests
 /tmp/HarborBackendTests
-swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o /tmp/HarborSheetTests
+swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o /tmp/HarborSheetTests
 /tmp/HarborSheetTests
+swiftc -D BACKEND_TEST Localization.swift tests/LocalizationTests.swift -o /tmp/HarborLocalizationTests
+/tmp/HarborLocalizationTests
 python3 build.py                 # ad-hoc app + arm64 ZIP + .zip.sha256
-python3 verify_release.py 'dist/Claude Harbor.app' --zip dist/Claude-Harbor-0.3.0-macOS-arm64.zip --checksum dist/Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
+python3 verify_release.py 'dist/Claude Harbor.app' --zip dist/Claude-Harbor-0.4.0-macOS-arm64.zip --checksum dist/Claude-Harbor-0.4.0-macOS-arm64.zip.sha256
 python3 install.py               # build + install into ~/Applications
 ```
 

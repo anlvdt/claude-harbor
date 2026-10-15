@@ -49,6 +49,12 @@ shasum -a 256 -c Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
 
 Bộ thử headless tạo/sửa clone Claude thật và sync/xác minh dữ liệu mẫu, không mở Electron. Đã kiểm tra nâng cấp Harbor và trình xem báo cáo trên app đã cài. Đăng nhập, trả lời Code thật và mở lại clone sau repair vẫn cần kiểm thử thủ công.
 
+## Tiếng Anh trong bản 0.4.0 sắp tới
+
+Nhánh mã nguồn `codex/english-ui` bổ sung **English và Tiếng Việt**. Mở **Language / Ngôn ngữ → System, English hoặc Tiếng Việt** trên menu chính hoặc biểu tượng menu bar. System dùng ngôn ngữ macOS được hỗ trợ và chọn English nếu không có. Lựa chọn được lưu lại, áp dụng ngay khi app rảnh; cần kết thúc thao tác hoặc đóng hộp thoại trước khi đổi.
+
+Tên tài khoản, nội dung hội thoại và báo cáo gốc giữ nguyên. Hộp thoại do macOS quản lý và lỗi hệ thống theo ngôn ngữ macOS. Bản này chưa phát hành; ZIP công khai ở trên vẫn là v0.3.0.
+
 ## Đã hỗ trợ
 
 - Mỗi bản Claude có dữ liệu đăng nhập riêng.

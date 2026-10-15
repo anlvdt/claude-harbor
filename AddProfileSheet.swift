@@ -3,11 +3,11 @@ import AppKit
 enum ProfileNameValidation {
     static func message(for value: String) -> String? {
         if value.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:\0\r\n")) != nil {
-            return "Tên không được chứa /, \\, dấu hai chấm hoặc ký tự xuống dòng."
+            return L("Tên không được chứa /, \\, dấu hai chấm hoặc ký tự xuống dòng.", "Names cannot contain /, \\, colons, or line breaks.")
         }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Nhập tên cho bản Claude mới." }
-        guard trimmed.unicodeScalars.count <= 60 else { return "Tên cần có từ 1 đến 60 ký tự." }
+        guard !trimmed.isEmpty else { return L("Nhập tên cho bản Claude mới.", "Enter a name for the new Claude app.") }
+        guard trimmed.unicodeScalars.count <= 60 else { return L("Tên cần có từ 1 đến 60 ký tự.", "Names must contain 1 to 60 characters.") }
         return nil
     }
 }
@@ -15,12 +15,12 @@ enum ProfileNameValidation {
 @MainActor final class AddProfileSheetController: NSObject, NSTextFieldDelegate {
     let name = NSTextField()
     let kind = NSPopUpButton()
-    let submitButton = NSButton(title: "Tạo và mở", target: nil, action: nil)
+    let submitButton = NSButton(title: L("Tạo và mở", "Create and open"), target: nil, action: nil)
     let errorLabel = NSTextField(wrappingLabelWithString: "")
     var onSubmit: ((String, String) async throws -> Void)?
     var onClose: (() -> Void)?
 
-    private let cancelButton = NSButton(title: "Hủy", target: nil, action: nil)
+    private let cancelButton = NSButton(title: L("Hủy", "Cancel"), target: nil, action: nil)
     private let providerDescription = NSTextField(wrappingLabelWithString: "")
     private var sheet: NSWindow?
     private var submitting = false
@@ -28,27 +28,27 @@ enum ProfileNameValidation {
 
     override init() {
         super.init()
-        name.placeholderString = "Ví dụ: Công việc, Cá nhân…"
+        name.placeholderString = L("Ví dụ: Công việc, Cá nhân…", "For example: Work, Personal…")
         name.delegate = self
-        name.setAccessibilityLabel("Tên bản Claude")
-        name.setAccessibilityHelp("Từ 1 đến 60 ký tự. Mỗi bản có đăng nhập riêng.")
-        kind.addItems(withTitles: ["Claude Pro / Max", "Magpie — thử nghiệm"])
+        name.setAccessibilityLabel(L("Tên bản Claude", "Claude app name"))
+        name.setAccessibilityHelp(L("Từ 1 đến 60 ký tự. Mỗi bản có đăng nhập riêng.", "1 to 60 characters. Each app has its own sign-in."))
+        kind.addItems(withTitles: ["Claude Pro / Max", L("Magpie — thử nghiệm", "Magpie — experimental")])
         kind.target = self
         kind.action = #selector(providerChanged)
-        kind.setAccessibilityLabel("Loại tài khoản")
+        kind.setAccessibilityLabel(L("Loại tài khoản", "Account type"))
         submitButton.bezelStyle = .rounded
         submitButton.target = self
         submitButton.action = #selector(submit)
         submitButton.keyEquivalent = "\r"
-        submitButton.setAccessibilityLabel("Tạo và mở bản Claude")
+        submitButton.setAccessibilityLabel(L("Tạo và mở bản Claude", "Create and open the Claude app"))
         cancelButton.bezelStyle = .rounded
         cancelButton.target = self
         cancelButton.action = #selector(cancel)
         cancelButton.keyEquivalent = "\u{1b}"
-        cancelButton.setAccessibilityLabel("Hủy thêm bản Claude")
+        cancelButton.setAccessibilityLabel(L("Hủy thêm bản Claude", "Cancel adding a Claude app"))
         errorLabel.font = .systemFont(ofSize: 12)
         errorLabel.textColor = .systemRed
-        errorLabel.setAccessibilityLabel("Lỗi tạo bản Claude")
+        errorLabel.setAccessibilityLabel(L("Lỗi tạo bản Claude", "Claude app creation error"))
         providerDescription.font = .systemFont(ofSize: 12)
         providerDescription.textColor = .secondaryLabelColor
         providerChanged()
@@ -79,7 +79,7 @@ enum ProfileNameValidation {
             return
         }
         guard let onSubmit else {
-            showErrorMessage("Chưa sẵn sàng tạo bản mới. Vui lòng thử lại.")
+            showErrorMessage(L("Chưa sẵn sàng tạo bản mới. Vui lòng thử lại.", "Not ready to create a new app. Please try again."))
             return
         }
         let title = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -118,8 +118,8 @@ enum ProfileNameValidation {
 
     @objc private func providerChanged() {
         providerDescription.stringValue = kind.indexOfSelectedItem == 1
-            ? "Thử nghiệm: dùng Magpie qua gateway loopback trên máy này. Cần gateway đang chạy và được cấu hình trước."
-            : "Dùng tài khoản Claude Pro / Max. Đăng nhập riêng trong app mới, sau đó mở tab Code và tạo một phiên local."
+            ? L("Thử nghiệm: dùng Magpie qua gateway loopback trên máy này. Cần gateway đang chạy và được cấu hình trước.", "Experimental: use Magpie through a loopback gateway on this Mac. The gateway must already be configured and running.")
+            : L("Dùng tài khoản Claude Pro / Max. Đăng nhập riêng trong app mới, sau đó mở tab Code và tạo một phiên local.", "Use a Claude Pro / Max account. Sign in separately in the new app, then open the Code tab and create a local session.")
         showErrorMessage("")
     }
 
@@ -128,7 +128,7 @@ enum ProfileNameValidation {
         name.isEnabled = !value
         kind.isEnabled = !value
         cancelButton.isEnabled = !value
-        submitButton.title = value ? "Đang tạo…" : "Tạo và mở"
+        submitButton.title = value ? L("Đang tạo…", "Creating…") : L("Tạo và mở", "Create and open")
         validate(showError: false)
     }
 
@@ -153,17 +153,17 @@ enum ProfileNameValidation {
     func makeSheet() -> NSWindow {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 390),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Thêm bản Claude"
+        window.title = L("Thêm bản Claude", "Add a Claude App")
         window.isReleasedWhenClosed = false
         let content = NSView()
         window.contentView = content
 
-        let title = NSTextField(labelWithString: "Thêm bản Claude")
+        let title = NSTextField(labelWithString: L("Thêm bản Claude", "Add a Claude App"))
         title.font = .systemFont(ofSize: 22, weight: .semibold)
-        let introduction = NSTextField(wrappingLabelWithString: "Tách riêng công việc và tài khoản với một app Claude mới.")
+        let introduction = NSTextField(wrappingLabelWithString: L("Tách riêng công việc và tài khoản với một app Claude mới.", "Keep work and accounts separate with a new Claude app."))
         introduction.textColor = .secondaryLabelColor
-        let nameLabel = NSTextField(labelWithString: "Tên bản Claude")
-        let kindLabel = NSTextField(labelWithString: "Loại tài khoản")
+        let nameLabel = NSTextField(labelWithString: L("Tên bản Claude", "Claude app name"))
+        let kindLabel = NSTextField(labelWithString: L("Loại tài khoản", "Account type"))
         for label in [nameLabel, kindLabel] { label.font = .systemFont(ofSize: 13, weight: .semibold) }
 
         let form = NSStackView(views: [title, introduction, nameLabel, name, kindLabel, kind, providerDescription, errorLabel])

@@ -71,6 +71,23 @@ class SyncTests(unittest.TestCase):
         sync.running_profiles = lambda: ['magpie']
         with self.assertRaises(ValueError): sync.sync_all()
 
+    def test_preflight_writing_reason_is_structured(self):
+        sync.running_profiles = lambda: ['magpie']
+        sync.live_cli_ids = lambda: {'magpie': {self.cli}}
+        with patch.object(sync, 'snapshot', side_effect=ValueError('truncated')):
+            result = sync.preflight()
+        self.assertIn('đang ghi phiên', result['busy'][0])
+        self.assertEqual(result['busyDetails'][0], {'profile': 'magpie', 'reason': 'session_writing'})
+
+    def test_preflight_reply_reason_preserves_user_title(self):
+        self.rows.append({'type': 'user', 'uuid': str(uuid.uuid4()), 'sessionId': self.cli, 'message': {'role': 'user', 'content': 'unfinished'}})
+        self.d['title'] = 'Bản gốc: đang ghi phiên, chờ lưu xong'
+        self.write(self.file, self.record, self.rows, self.d)
+        sync.running_profiles = lambda: ['magpie']
+        sync.live_cli_ids = lambda: {'magpie': {self.cli}}
+        result = sync.preflight()
+        self.assertEqual(result['busyDetails'][0], {'profile': 'magpie', 'reason': 'reply_in_progress', 'title': self.d['title']})
+
     def test_other_org_of_same_account_is_included(self):
         other = self.record.parent.parent / 'another-org' / self.record.name
         self.record.rename(other) if other.parent.exists() else None

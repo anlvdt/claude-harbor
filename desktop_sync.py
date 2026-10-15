@@ -196,6 +196,7 @@ def preflight():
 
 def _preflight():
     busy, errors = [], []
+    busy_details = []
     active = running_profiles(); live = live_cli_ids()
     for p,path,d in records():
         # Historical interrupted sessions are not running turns. Only inspect live SDKs.
@@ -203,12 +204,17 @@ def _preflight():
         if d['cliSessionId'] not in live[p] and d.get('latestUserFrameAt',0) < (time.time()-300)*1000:continue
         try:
             s = snapshot(p,path,d)
-            if s['busy'] and p in active:busy.append(NAMES[p]+': '+d.get('title',path.stem))
+            if s['busy'] and p in active:
+                title=d.get('title',path.stem)
+                busy.append(NAMES[p]+': '+title)
+                busy_details.append({'profile':p,'reason':'reply_in_progress','title':title})
         except (OSError,ValueError):
             busy.append(NAMES[p]+': đang ghi phiên, chờ lưu xong')
+            busy_details.append({'profile':p,'reason':'session_writing'})
     for p in BLOCKED & set(active) & set(live):
         busy.append(NAMES[p]+': cannot inspect active session safely')
-    return {'busy':busy,'errors':errors,'running':active}
+        busy_details.append({'profile':p,'reason':'uninspectable_session'})
+    return {'busy':busy,'busyDetails':busy_details,'errors':errors,'running':active}
 
 def prefix(left, right):
     return len(left) <= len(right) and left == right[:len(left)]

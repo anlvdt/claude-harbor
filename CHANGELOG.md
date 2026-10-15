@@ -1,6 +1,13 @@
 # Changelog
 
-## v0.3.0 — release candidate (2026-10-15)
+## Unreleased — v0.4.0
+
+- Add English and Vietnamese UI with a persistent System / English / Tiếng Việt menu in both the main menu and menu bar.
+- Switch the complete native interface while idle without restarting the app or calling backend operations; preserve account choices, health, window size and scroll position.
+- Translate forms, accessibility labels, confirmations, health/recovery messages, reports/activity and all stable backend error codes. Account names, conversation content and original diagnostics remain unchanged.
+- Add isolated preference, backend catalog, live language-switch and native UI tests. Include Localization.swift in build and CI; remove hard-coded artifact version paths.
+
+## v0.3.0 — 2026-10-15
 
 - Audit UI-to-backend wiring with an actual AppKit checkbox click through an installed disposable runtime, including stale-profile rejection.
 - Restore controls after dismissing operation details; tolerate malformed optional sync-report fields.

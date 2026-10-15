@@ -160,6 +160,7 @@ class ReleaseTests(unittest.TestCase):
             commands.append(command)
             if command[0] == '/usr/bin/swiftc':
                 self.assertIn(str(self.source / 'HistoryUI.swift'), command)
+                self.assertIn(str(self.source / 'Localization.swift'), command)
                 executable = Path(command[command.index('-o') + 1])
                 executable.write_bytes(self.executable.read_bytes())
                 executable.chmod(0o755)
