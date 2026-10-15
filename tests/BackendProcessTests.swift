@@ -146,6 +146,7 @@ import AppKit
         try await testDetailsDismissal()
         try testActivityStore()
         try await testHistoryActions()
+        try await testLanguageSwitch()
 
         // Stage the real dispatcher + runtime in a throwaway root. No real profiles.
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -449,6 +450,70 @@ import AppKit
         await manager.performSync()
         precondition(calls == ["check", "sync", "status"])
         precondition(reopenCalls == 1, "Pre-write failure should still reopen previous apps")
+    }
+
+    @MainActor static func testLanguageSwitch() async throws {
+        let suite = "HarborLanguageTests-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        let previousDefaults = L10n.defaults
+        let previousOverride = L10n.languageOverride
+        let previousManager = Manager.active
+        defer {
+            if let current = Manager.active, current !== previousManager {
+                current.window?.close()
+                if let item = current.item { NSStatusBar.system.removeStatusItem(item) }
+            }
+            Manager.active = previousManager
+            L10n.defaults = previousDefaults
+            L10n.languageOverride = previousOverride
+            defaults.removePersistentDomain(forName: suite)
+        }
+        L10n.defaults = defaults; L10n.languageOverride = nil
+        L10n.setPreference(.vietnamese)
+        let manager = Manager(); manager.prepareWindow(); manager.runtimeReady = true
+        let profile = Profile(id: "test", name: "Tài khoản gốc", kind: "claude", bundle: "/tmp/test.app", bundleID: "test.language", ready: true, running: false, syncEnabled: true, sessions: 5, archived: 0, health: [])
+        manager.render(Summary(profiles: [profile], pending: [], lastSync: nil, issues: []))
+        var backendCalls = 0
+        manager.request = { _ in backendCalls += 1; throw BackendFailure.incompatible }
+        manager.setPhase(.syncing)
+        precondition(manager.changeLanguage(to: .english) == nil)
+        precondition(L10n.preference == .vietnamese)
+        manager.setPhase(.idle)
+        manager.showOperationDetails()
+        precondition(manager.changeLanguage(to: .english) == nil, "Must not replace an attached sheet")
+        if let sheet = manager.window.attachedSheet { manager.window.endSheet(sheet) }
+        await manager.afterHistorySheetDismissal()
+        let frame = manager.window.frame
+        let failedMessage = "Đã ghi đồng bộ nhưng chưa xác minh thành công. Giữ các app đã đóng."
+        manager.status.stringValue = failedMessage
+        let english = manager.changeLanguage(to: .english)!
+        precondition(english.status.stringValue.contains(failedMessage), "Language switching must retain the latest failure")
+        precondition(english.add.title == "Add account" && english.refresh.title == "Refresh")
+        precondition(english.importButton.title == "Import history…" && english.verifyButton.title == "Verify history")
+        precondition(english.profiles[0].name == profile.name && english.profiles[0].syncEnabled)
+        precondition(english.profiles[0].sessions == 5 && english.window.frame == frame)
+        precondition(backendCalls == 0, "Changing language must not call or mutate the backend")
+        precondition(english.historyReportText().contains("Read-only Report"))
+        let writing = Data(#"{"busy":["private backend text"],"errors":[],"running":["test"],"eligible":["test"],"pending":[],"busyDetails":[{"profile":"test","reason":"session_writing"}]}"#.utf8)
+        let writingCheck = try JSONDecoder().decode(Check.self, from: writing)
+        precondition(writingCheck.busyDescription(profiles: [profile]) == profile.name + ": session is being written; waiting for it to save")
+        let reply = Data(#"{"busy":["private backend text"],"errors":[],"running":["test"],"eligible":["test"],"pending":[],"busyDetails":[{"profile":"test","reason":"reply_in_progress","title":"Bản gốc: đang ghi phiên, chờ lưu xong"}]}"#.utf8)
+        let replyCheck = try JSONDecoder().decode(Check.self, from: reply)
+        precondition(replyCheck.busyDescription(profiles: [profile]) == profile.name + ": Bản gốc: đang ghi phiên, chờ lưu xong")
+        let legacy = Data(#"{"busy":["đang ghi phiên, chờ lưu xong"],"errors":[],"running":[],"eligible":[],"pending":[]}"#.utf8)
+        let legacyCheck = try JSONDecoder().decode(Check.self, from: legacy)
+        precondition(legacyCheck.busyDescription(profiles: []) == "Waiting for active sessions to finish.")
+        let form = AddProfileSheetController()
+        precondition(form.submitButton.title == "Create and open")
+        precondition(ProfileNameValidation.message(for: "") == "Enter a name for the new Claude app.")
+        precondition(HealthIssue(profile: nil, code: "source_unavailable", detail: "", blocking: false).displayText.contains("Official Claude"))
+        let submenu = english.makeLanguageMenu()
+        let viIndex = submenu.items.firstIndex { ($0.representedObject as? String) == "vi" }!
+        submenu.performActionForItem(at: viIndex)
+        precondition(Manager.active?.add.title == "Thêm tài khoản")
+        precondition(Manager.active?.status.stringValue.contains(failedMessage) == true)
+        precondition(Manager.active?.previousLanguageMessage == failedMessage, "Do not nest or lose a notice after two switches")
+        precondition(L10n.preference == .vietnamese && backendCalls == 0)
     }
 
     @MainActor static func renderPreviews(_ manager: Manager, directory: URL) throws {

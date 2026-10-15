@@ -11,28 +11,28 @@ struct SyncAvailability {
         participantCount = participants.count
         isEnabled = runtimeReady && !recoveryNeeded && !phase.isBusy && participants.count >= 2 && !participants.contains { $0.health.contains(where: \.blocking) }
         if phase.canCancel {
-            explanation = "Chờ Claude trả lời xong. Bạn có thể dừng chờ; lịch sử chưa thay đổi."
+            explanation = L("Chờ Claude trả lời xong. Bạn có thể dừng chờ; lịch sử chưa thay đổi.", "Wait for Claude to finish responding. You can stop waiting; history has not changed.")
         } else if phase == .configuring {
-            explanation = "Hoàn tất hoặc đóng cửa sổ thêm tài khoản để tiếp tục."
+            explanation = L("Hoàn tất hoặc đóng cửa sổ thêm tài khoản để tiếp tục.", "Finish or close the add account window to continue.")
         } else if phase.isBusy {
-            explanation = "Thao tác đang chạy. Giữ Harbor mở cho đến khi hoàn tất."
+            explanation = L("Thao tác đang chạy. Giữ Harbor mở cho đến khi hoàn tất.", "An operation is running. Keep Harbor open until it finishes.")
         } else if !runtimeReady {
-            explanation = "Bấm Làm mới để kết nối lại trước khi thao tác."
+            explanation = L("Bấm Làm mới để kết nối lại trước khi thao tác.", "Click Refresh to reconnect before continuing.")
         } else if recoveryNeeded {
-            explanation = "Cần phục hồi giao dịch trước khi đồng bộ. Đóng các bản Claude rồi chọn Kiểm tra."
+            explanation = L("Cần phục hồi giao dịch trước khi đồng bộ. Đóng các bản Claude rồi chọn Kiểm tra.", "Transaction recovery is required before syncing. Close the Claude apps, then choose Check.")
         } else if profiles.isEmpty {
-            explanation = "Thêm tài khoản đầu tiên để bắt đầu."
+            explanation = L("Thêm tài khoản đầu tiên để bắt đầu.", "Add your first account to get started.")
         } else if participants.contains(where: { $0.health.contains(where: \.blocking) }) {
-            explanation = "Sửa bản Claude bị lỗi hoặc bỏ chọn tài khoản đó trước khi đồng bộ."
+            explanation = L("Sửa bản Claude bị lỗi hoặc bỏ chọn tài khoản đó trước khi đồng bộ.", "Repair the affected Claude app or deselect that account before syncing.")
         } else if profiles.count < 2 {
-            explanation = "Thêm tài khoản thứ hai để chia sẻ lịch sử Code."
+            explanation = L("Thêm tài khoản thứ hai để chia sẻ lịch sử Code.", "Add a second account to share Code history.")
         } else if ready.count < 2 {
-            explanation = "Đăng nhập và mở tab Code ở ít nhất hai tài khoản để tiếp tục."
+            explanation = L("Đăng nhập và mở tab Code ở ít nhất hai tài khoản để tiếp tục.", "Sign in and open the Code tab in at least two accounts to continue.")
         } else if participants.count < 2 {
-            explanation = "Chọn Đồng bộ ở ít nhất hai tài khoản sẵn sàng."
+            explanation = L("Chọn Đồng bộ ở ít nhất hai tài khoản sẵn sàng.", "Select Sync for at least two ready accounts.")
         } else {
-            explanation = "Các bản Claude đang chạy sẽ đóng trong lúc ghi, rồi được mở lại. Đăng nhập luôn giữ riêng."
-                + (profiles.contains(where: { $0.syncEnabled && !$0.ready }) ? " Tài khoản chưa thiết lập sẽ được bỏ qua." : "")
+            explanation = L("Các bản Claude đang chạy sẽ đóng trong lúc ghi, rồi được mở lại. Đăng nhập luôn giữ riêng.", "Running Claude apps will close while changes are written, then reopen. Sign-ins remain separate.")
+                + (profiles.contains(where: { $0.syncEnabled && !$0.ready }) ? L(" Tài khoản chưa thiết lập sẽ được bỏ qua.", " Accounts that are not set up will be skipped.") : "")
         }
     }
 }
@@ -148,8 +148,8 @@ struct SyncAvailability {
         let title = HarborUI.label(profile.name, size: 14, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail; title.toolTip = profile.name
         title.setContentCompressionResistancePriority(.init(500), for: .horizontal)
-        let provider = profile.kind == "magpie" ? "Magpie · Gateway local" : "Claude Desktop"
-        let meta = HarborUI.label(profile.ready ? "\(provider) · \(profile.sessions) phiên Code" : provider, size: 12, secondary: true)
+        let provider = profile.kind == "magpie" ? L("Magpie · Gateway local", "Magpie · Local gateway") : "Claude Desktop"
+        let meta = HarborUI.label(profile.ready ? L("\(provider) · \(profile.sessions) phiên Code", "\(provider) · \(profile.sessions) Code sessions") : provider, size: 12, secondary: true)
         meta.lineBreakMode = .byTruncatingTail
         let text = HarborUI.stack([title, meta], vertical: true, spacing: 5)
         text.setContentHuggingPriority(.init(1), for: .horizontal)
@@ -160,29 +160,29 @@ struct SyncAvailability {
             text.addArrangedSubview(hint)
             hint.widthAnchor.constraint(equalTo: text.widthAnchor).isActive = true
         } else if !profile.ready {
-            let hint = HarborUI.label("Đăng nhập, mở Code và tạo một phiên local.", size: 12, secondary: true, wrap: true)
+            let hint = HarborUI.label(L("Đăng nhập, mở Code và tạo một phiên local.", "Sign in, open Code, and create a local session."), size: 12, secondary: true, wrap: true)
             text.addArrangedSubview(hint)
             hint.widthAnchor.constraint(equalTo: text.widthAnchor).isActive = true
         }
         let blocked = profile.health.contains(where: \.blocking)
-        let badgeTitle = blocked ? "Cần sửa" : (!profile.ready ? "Cần thiết lập" : (profile.running ? "Đang chạy" : "Sẵn sàng"))
+        let badgeTitle = blocked ? L("Cần sửa", "Needs repair") : (!profile.ready ? L("Cần thiết lập", "Needs setup") : (profile.running ? L("Đang chạy", "Running") : L("Sẵn sàng", "Ready")))
         let badge = HarborBadge(text: badgeTitle, symbol: blocked || !profile.ready ? "exclamationmark.circle.fill" : (profile.running ? "circle.fill" : "checkmark.circle.fill"), color: blocked || !profile.ready ? .systemOrange : .systemGreen)
-        let chosen = NSButton(checkboxWithTitle: "Đồng bộ", target: target, action: #selector(Manager.selectForSync(_:)))
+        let chosen = NSButton(checkboxWithTitle: L("Đồng bộ", "Sync"), target: target, action: #selector(Manager.selectForSync(_:)))
         chosen.tag = index; chosen.state = selected ? .on : .off
         chosen.identifier = .init("sync.\(profile.id)")
-        chosen.toolTip = "Cho phép chia sẻ lịch sử Code với các tài khoản được chọn khác."
-        chosen.setAccessibilityLabel("Đồng bộ lịch sử Code của \(profile.name)")
+        chosen.toolTip = L("Cho phép chia sẻ lịch sử Code với các tài khoản được chọn khác.", "Allow sharing Code history with other selected accounts.")
+        chosen.setAccessibilityLabel(L("Đồng bộ lịch sử Code của \(profile.name)", "Sync Code history for \(profile.name)"))
         chosen.setContentCompressionResistancePriority(.required, for: .horizontal)
         chosen.widthAnchor.constraint(equalToConstant: 86).isActive = true
-        let open = NSButton(title: "Mở", target: target, action: #selector(Manager.openOne(_:)))
+        let open = NSButton(title: L("Mở", "Open"), target: target, action: #selector(Manager.openOne(_:)))
         open.tag = index; open.identifier = .init("open.\(profile.id)")
-        open.setAccessibilityLabel("Mở \(profile.name)")
+        open.setAccessibilityLabel(L("Mở \(profile.name)", "Open \(profile.name)"))
         HarborUI.button(open)
         for view in [avatar, text, badge, chosen] { addArrangedSubview(view) }
         if profile.health.contains(where: { $0.blocking || $0.code == "source_version_changed" }) {
-            let repair = NSButton(title: "Sửa", target: target, action: #selector(Manager.repairProfile(_:)))
+            let repair = NSButton(title: L("Sửa", "Repair"), target: target, action: #selector(Manager.repairProfile(_:)))
             repair.tag = index; repair.identifier = .init("repair.\(profile.id)")
-            repair.setAccessibilityLabel("Sửa bản app của \(profile.name)")
+            repair.setAccessibilityLabel(L("Sửa bản app của \(profile.name)", "Repair the app for \(profile.name)"))
             HarborUI.button(repair)
             addArrangedSubview(repair)
         }

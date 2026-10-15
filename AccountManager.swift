@@ -8,19 +8,38 @@ struct Profile: Decodable, Sendable {
     var health: [HealthIssue]
 }
 struct Summary: Decodable { let profiles: [Profile]; let pending: [String]; let lastSync: Report?; let issues: [HealthIssue] }
-struct Check: Decodable { let busy: [String]; let errors: [String]; let running: [String]; let eligible: [String]; let pending: [String] }
+struct Check: Decodable {
+    let busy: [String]; let errors: [String]; let running: [String]; let eligible: [String]; let pending: [String]
+    struct BusyDetail: Decodable { let profile: String; let reason: String; let title: String? }
+    let busyDetails: [BusyDetail]?
+    func busyDescription(profiles: [Profile]) -> String {
+        guard let busyDetails, busyDetails.count == busy.count else {
+            return L10n.language == .english ? "Waiting for active sessions to finish." : busy.joined(separator: "; ")
+        }
+        return busyDetails.map { detail in
+            let name = profiles.first { $0.id == detail.profile }?.name ?? L("Tài khoản", "Account")
+            let reason: String
+            switch detail.reason {
+            case "reply_in_progress": reason = detail.title ?? L("đang trả lời", "reply in progress")
+            case "session_writing": reason = L("đang ghi phiên, chờ lưu xong", "session is being written; waiting for it to save")
+            default: reason = L("chưa kiểm tra an toàn được phiên đang chạy", "cannot safely inspect the active session")
+            }
+            return name + ": " + reason
+        }.joined(separator: "; ")
+    }
+}
 struct Report: Decodable { let profiles: Int; let sessions: Int; let newBranches: Int; let filesChanged: Int; let backup: String; let warnings: Int?; let pending: [String]? }
 struct HealthIssue: Decodable {
     let profile: String?; let code: String; let detail: String; let blocking: Bool
     var displayText: String {
         switch code {
         case "clone_layout_changed", "missing_binary", "clone_version_changed", "launcher_modified", "invalid_signature", "unreadable_clone":
-            return "Đóng các bản Claude rồi chọn Sửa để khôi phục app."
-        case "source_version_changed": return "Claude gốc đã cập nhật; có thể sửa để cập nhật bản riêng."
-        case "source_unavailable": return "Chưa tìm thấy Claude gốc để tạo hoặc sửa bản riêng."
-        case "pending_recovery", "interrupted_clone_repair": return "Có giao dịch chưa hoàn tất; đóng các profile rồi phục hồi."
-        case "recovery_unreadable": return "Không đọc được nhật ký; giữ lại bản sao lưu và kiểm tra dữ liệu."
-        default: return "Có vấn đề cần kiểm tra [\(code)]."
+            return L("Đóng các bản Claude rồi chọn Sửa để khôi phục app.", "Close the Claude apps, then choose Repair to restore the app.")
+        case "source_version_changed": return L("Claude gốc đã cập nhật; có thể sửa để cập nhật bản riêng.", "Official Claude has updated; repair to update this copy.")
+        case "source_unavailable": return L("Chưa tìm thấy Claude gốc để tạo hoặc sửa bản riêng.", "Official Claude is unavailable for creating or repairing copies.")
+        case "pending_recovery", "interrupted_clone_repair": return L("Có giao dịch chưa hoàn tất; đóng các profile rồi phục hồi.", "An operation is unfinished; close the profiles, then recover it.")
+        case "recovery_unreadable": return L("Không đọc được nhật ký; giữ lại bản sao lưu và kiểm tra dữ liệu.", "The journal cannot be read; keep the backups and inspect your data.")
+        default: return L("Có vấn đề cần kiểm tra [\(code)].", "An issue needs attention [\(code)].")
         }
     }
 }
@@ -30,7 +49,7 @@ struct BackendFailure: Decodable, LocalizedError {
     let code: String
     let message: String
     let remediation: String
-    var errorDescription: String? { "\(message)\n\(remediation) [\(code)]" }
+    var errorDescription: String? { L10n.backendError(code: code, message: message, remediation: remediation) }
     static let incompatible = BackendFailure(code: "protocol_incompatible", message: "Giao diện và runtime không tương thích.", remediation: "Mở lại Harbor từ cùng một bản cài đặt để cập nhật runtime.")
 }
 struct RuntimeCapabilities: Decodable {
@@ -62,22 +81,22 @@ enum OperationPhase {
     var canCancel: Bool { self == .waiting }
     var title: String {
         switch self {
-        case .idle: return "Sẵn sàng"
-        case .starting: return "Đang khởi tạo…"
-        case .loading: return "Đang làm mới…"
-        case .selecting: return "Đang lưu lựa chọn…"
-        case .opening: return "Đang mở Claude…"
-        case .configuring: return "Thêm tài khoản"
-        case .creating: return "Đang tạo bản Claude…"
-        case .checking: return "Đang kiểm tra…"
-        case .waiting: return "Đang chờ trả lời xong…"
-        case .closing: return "Đang đóng các bản Claude…"
-        case .syncing: return "Đang sao lưu và đồng bộ…"
-        case .importing: return "Đang sao lưu và nhập lịch sử…"
-        case .verifying: return "Đang xác minh lịch sử…"
-        case .reopening: return "Đang mở lại các app…"
-        case .repairing: return "Đang sửa bản Claude…"
-        case .recovering: return "Đang phục hồi giao dịch…"
+        case .idle: return L("Sẵn sàng", "Ready")
+        case .starting: return L("Đang khởi tạo…", "Starting…")
+        case .loading: return L("Đang làm mới…", "Refreshing…")
+        case .selecting: return L("Đang lưu lựa chọn…", "Saving selection…")
+        case .opening: return L("Đang mở Claude…", "Opening Claude…")
+        case .configuring: return L("Thêm tài khoản", "Add account")
+        case .creating: return L("Đang tạo bản Claude…", "Creating Claude copy…")
+        case .checking: return L("Đang kiểm tra…", "Checking…")
+        case .waiting: return L("Đang chờ trả lời xong…", "Waiting for replies…")
+        case .closing: return L("Đang đóng các bản Claude…", "Closing Claude apps…")
+        case .syncing: return L("Đang sao lưu và đồng bộ…", "Backing up and syncing…")
+        case .importing: return L("Đang sao lưu và nhập lịch sử…", "Backing up and importing history…")
+        case .verifying: return L("Đang xác minh lịch sử…", "Verifying history…")
+        case .reopening: return L("Đang mở lại các app…", "Reopening apps…")
+        case .repairing: return L("Đang sửa bản Claude…", "Repairing Claude copy…")
+        case .recovering: return L("Đang phục hồi giao dịch…", "Recovering operation…")
         }
     }
 }
@@ -178,38 +197,42 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
 }
 
 @MainActor final class Manager: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+    // NSApplication.delegate is weak. Retain only the currently displayed manager.
+    static var active: Manager?
     var window: NSWindow!
     var profiles: [Profile] = []
-    let status = NSTextField(wrappingLabelWithString: "Đang đọc các profile…")
+    let status = NSTextField(wrappingLabelWithString: L("Đang đọc các profile…", "Loading profiles…"))
     let footer = NSTextField(wrappingLabelWithString: "")
-    let sync = NSButton(title: "Đồng bộ đã chọn", target: nil, action: nil)
-    let add = NSButton(title: "Thêm tài khoản", target: nil, action: nil)
-    let openAll = NSButton(title: "Mở tất cả", target: nil, action: nil)
-    let refresh = NSButton(title: "Làm mới", target: nil, action: nil)
-    let health = NSButton(title: "Kiểm tra", target: nil, action: nil)
+    let sync = NSButton(title: L("Đồng bộ đã chọn", "Sync selected"), target: nil, action: nil)
+    let add = NSButton(title: L("Thêm tài khoản", "Add account"), target: nil, action: nil)
+    let openAll = NSButton(title: L("Mở tất cả", "Open all"), target: nil, action: nil)
+    let refresh = NSButton(title: L("Làm mới", "Refresh"), target: nil, action: nil)
+    let health = NSButton(title: L("Kiểm tra", "Check health"), target: nil, action: nil)
     let progress = NSProgressIndicator()
-    let menuStatus = NSMenuItem(title: "Đang khởi tạo…", action: nil, keyEquivalent: "")
+    let menuStatus = NSMenuItem(title: L("Đang khởi tạo…", "Starting…"), action: nil, keyEquivalent: "")
     let rows = FlippedStackView()
     let scroll = NSScrollView()
     let emptyState = NSView()
-    let overviewLabel = HarborUI.label("Tài khoản của bạn", size: 13, secondary: true)
-    let selectionLabel = HarborUI.label("Chưa chọn tài khoản", size: 12, weight: .medium, secondary: true)
-    let operationHeading = HarborUI.label("Hoạt động gần nhất", size: 12, weight: .semibold)
+    let overviewLabel = HarborUI.label(L("Tài khoản của bạn", "Your accounts"), size: 13, secondary: true)
+    let selectionLabel = HarborUI.label(L("Chưa chọn tài khoản", "No accounts selected"), size: 12, weight: .medium, secondary: true)
+    let operationHeading = HarborUI.label(L("Hoạt động gần nhất", "Latest activity"), size: 12, weight: .semibold)
     let healthBanner = HarborSurface()
     let bannerLabel = HarborUI.label("", size: 13, weight: .semibold)
     let bannerHint = HarborUI.label("", size: 12, secondary: true, wrap: true)
-    let bannerAction = NSButton(title: "Kiểm tra", target: nil, action: nil)
-    let emptyAdd = NSButton(title: "Thêm tài khoản đầu tiên", target: nil, action: nil)
-    let reportButton = NSButton(title: "Báo cáo & sao lưu", target: nil, action: nil)
-    let detailsButton = NSButton(title: "Chi tiết", target: nil, action: nil)
-    let importButton = NSButton(title: "Nhập lịch sử…", target: nil, action: nil)
-    let verifyButton = NSButton(title: "Xác minh lịch sử", target: nil, action: nil)
+    let bannerAction = NSButton(title: L("Kiểm tra", "Check health"), target: nil, action: nil)
+    let emptyAdd = NSButton(title: L("Thêm tài khoản đầu tiên", "Add your first account"), target: nil, action: nil)
+    let reportButton = NSButton(title: L("Báo cáo & sao lưu", "Reports & backups"), target: nil, action: nil)
+    let detailsButton = NSButton(title: L("Chi tiết", "Details"), target: nil, action: nil)
+    let importButton = NSButton(title: L("Nhập lịch sử…", "Import history…"), target: nil, action: nil)
+    let verifyButton = NSButton(title: L("Xác minh lịch sử", "Verify history"), target: nil, action: nil)
     #if BACKEND_TEST
     var activityStore: OperationActivityStore? = nil
     #else
     var activityStore: OperationActivityStore? = OperationActivityStore(directory: root)
     #endif
     var activityWarning: String?
+    var previousLanguageMessage: String?
+    var languageSwitchNotice: String?
     var addSheet: AddProfileSheetController?
     var phase = OperationPhase.idle
     var runtimeReady = false
@@ -232,19 +255,21 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         let menu = NSMenu()
         let appMenu = NSMenuItem(); menu.addItem(appMenu)
         let appSub = NSMenu(); appMenu.submenu = appSub
-        appSub.addItem(withTitle: "Ẩn Claude Harbor", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appSub.addItem(withTitle: L("Ẩn Claude Harbor", "Hide Claude Harbor"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appSub.addItem(.separator())
-        appSub.addItem(withTitle: "Thoát Claude Harbor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let editItem = NSMenuItem(); editItem.title = "Sửa"; menu.addItem(editItem)
-        let edit = NSMenu(title: "Sửa"); editItem.submenu = edit
-        for (title, selector, key) in [("Cắt", "cut:", "x"), ("Sao chép", "copy:", "c"), ("Dán", "paste:", "v"), ("Chọn tất cả", "selectAll:", "a")] {
+        appSub.addItem(withTitle: L("Thoát Claude Harbor", "Quit Claude Harbor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let editItem = NSMenuItem(); editItem.title = L("Sửa", "Edit"); menu.addItem(editItem)
+        let edit = NSMenu(title: L("Sửa", "Edit")); editItem.submenu = edit
+        for (title, selector, key) in [(L("Cắt", "Cut"), "cut:", "x"), (L("Sao chép", "Copy"), "copy:", "c"), (L("Dán", "Paste"), "paste:", "v"), (L("Chọn tất cả", "Select all"), "selectAll:", "a")] {
             edit.addItem(withTitle: title, action: Selector(selector), keyEquivalent: key)
         }
-        let actionsItem = NSMenuItem(); actionsItem.title = "Tài khoản"; menu.addItem(actionsItem)
-        let actions = NSMenu(title: "Tài khoản"); actionsItem.submenu = actions
-        for (title, action, key) in [("Thêm tài khoản…", #selector(addProfile), "n"), ("Mở tất cả", #selector(openEveryProfile), "o"), ("Làm mới", #selector(refreshNow), "r"), ("Kiểm tra…", #selector(showHealth), "i"), ("Nhập lịch sử…", #selector(importHistory), ""), ("Xác minh lịch sử", #selector(verifyHistory), ""), ("Báo cáo & hoạt động…", #selector(showReport), "")] {
+        let actionsItem = NSMenuItem(); actionsItem.title = L("Tài khoản", "Accounts"); menu.addItem(actionsItem)
+        let actions = NSMenu(title: L("Tài khoản", "Accounts")); actionsItem.submenu = actions
+        for (title, action, key) in [(L("Thêm tài khoản…", "Add account…"), #selector(addProfile), "n"), (L("Mở tất cả", "Open all"), #selector(openEveryProfile), "o"), (L("Làm mới", "Refresh"), #selector(refreshNow), "r"), (L("Kiểm tra…", "Check health…"), #selector(showHealth), "i"), (L("Nhập lịch sử…", "Import history…"), #selector(importHistory), ""), (L("Xác minh lịch sử", "Verify history"), #selector(verifyHistory), ""), (L("Báo cáo & hoạt động…", "Reports & activity…"), #selector(showReport), "")] {
             let entry = actions.addItem(withTitle: title, action: action, keyEquivalent: key); entry.target = self
         }
+        let language = NSMenuItem(title: "Language / Ngôn ngữ", action: nil, keyEquivalent: "")
+        language.submenu = makeLanguageMenu(); menu.addItem(language)
         NSApp.mainMenu = menu
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Claude Harbor"; window.center(); window.isReleasedWhenClosed = false
@@ -252,7 +277,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         window.backgroundColor = .windowBackgroundColor
         let rootView = NSView(); window.contentView = rootView
         let title = HarborUI.label("Claude Harbor", size: 24, weight: .semibold)
-        let subtitle = HarborUI.label("Nhiều tài khoản. Một nơi tiếp tục công việc.", size: 13, secondary: true)
+        let subtitle = HarborUI.label(L("Nhiều tài khoản. Một nơi tiếp tục công việc.", "Multiple accounts. One place to keep working."), size: 13, secondary: true)
         let brandText = HarborUI.stack([title, subtitle], vertical: true, spacing: 5)
         let brand = HarborSurface(); brand.fill = NSColor.controlAccentColor.withAlphaComponent(0.10); brand.border = .clear
         let brandIcon = HarborUI.symbol("square.stack.3d.up.fill", size: 24, color: .controlAccentColor)
@@ -262,13 +287,13 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         add.target = self; add.action = #selector(addProfile); HarborUI.button(add, symbol: "plus")
         refresh.target = self; refresh.action = #selector(refreshNow); HarborUI.button(refresh, symbol: "arrow.clockwise")
         health.target = self; health.action = #selector(showHealth); HarborUI.button(health, symbol: "checkmark.shield")
-        refresh.toolTip = "Làm mới danh sách (⌘R)"; health.toolTip = "Kiểm tra bản Claude và phục hồi (⌘I)"; add.toolTip = "Thêm một bản Claude có đăng nhập riêng (⌘N)"
+        refresh.toolTip = L("Làm mới danh sách (⌘R)", "Refresh accounts (⌘R)"); health.toolTip = L("Kiểm tra bản Claude và phục hồi (⌘I)", "Check Claude copies and recovery (⌘I)"); add.toolTip = L("Thêm một bản Claude có đăng nhập riêng (⌘N)", "Add a Claude copy with its own login (⌘N)")
         let header = HarborUI.stack([brand, brandText, HarborUI.spacer(), refresh, health, add], spacing: 12)
         header.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
         openAll.target = self; openAll.action = #selector(openEveryProfile); HarborUI.button(openAll, symbol: "arrow.up.forward.app")
         importButton.target = self; importButton.action = #selector(importHistory); HarborUI.button(importButton, symbol: "square.and.arrow.down")
         verifyButton.target = self; verifyButton.action = #selector(verifyHistory); HarborUI.button(verifyButton, symbol: "checkmark.seal")
-        let historyHint = "Chọn ít nhất một tài khoản đã khởi tạo, xử lý lỗi và đóng các bản Claude trước khi nhập hoặc xác minh."
+        let historyHint = L("Chọn ít nhất một tài khoản đã khởi tạo, xử lý lỗi và đóng các bản Claude trước khi nhập hoặc xác minh.", "Select at least one initialized account, resolve issues and close Claude copies before importing or verifying.")
         importButton.toolTip = historyHint; verifyButton.toolTip = historyHint
         let overview = HarborUI.stack([overviewLabel, HarborUI.spacer(), importButton, verifyButton, openAll], spacing: 12)
 
@@ -281,8 +306,8 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         healthBanner.isHidden = true
 
         let listCard = HarborSurface()
-        let listTitle = HarborUI.label("Tài khoản", size: 16, weight: .semibold)
-        let listHint = HarborUI.label("Chọn tài khoản được phép chia sẻ lịch sử Code.", size: 12, secondary: true)
+        let listTitle = HarborUI.label(L("Tài khoản", "Accounts"), size: 16, weight: .semibold)
+        let listHint = HarborUI.label(L("Chọn tài khoản được phép chia sẻ lịch sử Code.", "Choose which accounts may share Code history."), size: 12, secondary: true)
         let listText = HarborUI.stack([listTitle, listHint], vertical: true, spacing: 5)
         let listHeader = HarborUI.stack([listText, HarborUI.spacer(), selectionLabel])
         listCard.addSubview(listHeader)
@@ -317,8 +342,8 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             emptyState.topAnchor.constraint(equalTo: scroll.topAnchor), emptyState.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
         ])
         let emptyIcon = HarborUI.symbol("person.2.badge.plus", size: 32, color: .controlAccentColor)
-        let emptyTitle = HarborUI.label("Thêm tài khoản đầu tiên của bạn", size: 18, weight: .semibold)
-        let emptyHint = HarborUI.label("Mỗi tài khoản có một bản Claude riêng.\nLịch sử chỉ chia sẻ khi bạn chọn Đồng bộ.", size: 13, secondary: true, wrap: true)
+        let emptyTitle = HarborUI.label(L("Thêm tài khoản đầu tiên của bạn", "Add your first account"), size: 18, weight: .semibold)
+        let emptyHint = HarborUI.label(L("Mỗi tài khoản có một bản Claude riêng.\nLịch sử chỉ chia sẻ khi bạn chọn Đồng bộ.", "Each account has its own Claude app.\nHistory is shared only when you select Sync."), size: 13, secondary: true, wrap: true)
         emptyHint.alignment = .center
         emptyAdd.target = self; emptyAdd.action = #selector(addProfile); HarborUI.button(emptyAdd, symbol: "plus", prominent: true)
         let emptyContent = HarborUI.stack([emptyIcon, emptyTitle, emptyHint, emptyAdd], vertical: true, spacing: 12)
@@ -342,7 +367,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         detailsButton.bezelStyle = .inline; detailsButton.isBordered = false
         detailsButton.font = .systemFont(ofSize: 12)
         detailsButton.contentTintColor = .controlAccentColor
-        detailsButton.setAccessibilityLabel("Xem đầy đủ nội dung hoạt động")
+        detailsButton.setAccessibilityLabel(L("Xem đầy đủ nội dung hoạt động", "Show full activity details"))
         let activityHeader = HarborUI.stack([operationHeading, progress, HarborUI.spacer(), detailsButton], spacing: 8)
         let activityText = HarborUI.stack([activityHeader, status], vertical: true, spacing: 6)
         activityText.setContentHuggingPriority(.init(1), for: .horizontal)
@@ -351,7 +376,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         let activityContent = HarborUI.stack([HarborUI.symbol("clock.arrow.circlepath", size: 18), activityText, reportButton], spacing: 12)
         HarborUI.pin(activityContent, in: activity, inset: 14)
         activity.heightAnchor.constraint(greaterThanOrEqualToConstant: 76).isActive = true
-        let syncHeading = HarborUI.label("Đồng bộ lịch sử Code", size: 15, weight: .semibold)
+        let syncHeading = HarborUI.label(L("Đồng bộ lịch sử Code", "Sync Code history"), size: 15, weight: .semibold)
         footer.font = .systemFont(ofSize: 12); footer.textColor = .secondaryLabelColor
         footer.maximumNumberOfLines = 3
         let syncText = HarborUI.stack([syncHeading, footer], vertical: true, spacing: 6)
@@ -362,7 +387,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         sync.widthAnchor.constraint(greaterThanOrEqualToConstant: 206).isActive = true
         let syncBar = HarborUI.stack([syncText, sync], spacing: 28)
         syncBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
-        let scope = HarborUI.label("Chỉ Code local trên máy này · Không gồm Chat web, Cowork hoặc cloud", size: 11, secondary: true)
+        let scope = HarborUI.label(L("Chỉ Code local trên máy này · Không gồm Chat web, Cowork hoặc cloud", "Local Code on this Mac only · Excludes web Chat, Cowork and cloud"), size: 11, secondary: true)
         let content = HarborUI.stack([header, overview, healthBanner, listCard, activity, syncBar, scope], vertical: true, spacing: 12)
         content.detachesHiddenViews = true
         HarborUI.pin(content, in: rootView, inset: 20)
@@ -371,19 +396,71 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         item.button?.image = NSImage(systemSymbolName: "square.stack.3d.up", accessibilityDescription: "Claude Harbor")
         let quick = NSMenu(); quick.autoenablesItems = false
         menuStatus.isEnabled = false; quick.addItem(menuStatus); quick.addItem(.separator())
-        for (name, action) in [("Claude Harbor…", #selector(showWindow)), ("Mở tất cả", #selector(openEveryProfile)), ("Đồng bộ đã chọn", #selector(synchronize))] {
+        for (name, action) in [("Claude Harbor…", #selector(showWindow)), (L("Mở tất cả", "Open all"), #selector(openEveryProfile)), (L("Đồng bộ đã chọn", "Sync selected"), #selector(synchronize))] {
             let entry = quick.addItem(withTitle: name, action: action, keyEquivalent: ""); entry.target = self
         }
+        let quickLanguage = NSMenuItem(title: "Language / Ngôn ngữ", action: nil, keyEquivalent: "")
+        quickLanguage.submenu = makeLanguageMenu(); quick.addItem(quickLanguage)
         item.menu = quick
         updateControls()
     }
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if window?.attachedSheet != nil { return false }
+        if menuItem.action == #selector(chooseLanguage(_:)) { return !working && addSheet == nil }
         if menuItem.action == #selector(importHistory) || menuItem.action == #selector(verifyHistory) { return historyActionAvailable }
         if menuItem.action == #selector(showReport) { return !working }
         if menuItem.action == #selector(refreshNow) { return !working }
         if menuItem.action == #selector(openEveryProfile) { return !working && runtimeReady && !profiles.isEmpty }
         return !working && runtimeReady
+    }
+    func makeLanguageMenu() -> NSMenu {
+        let menu = NSMenu(title: "Language / Ngôn ngữ")
+        for (title, preference) in [(L("Theo hệ thống", "System"), LanguagePreference.system), ("English", .english), ("Tiếng Việt", .vietnamese)] {
+            let entry = menu.addItem(withTitle: title, action: #selector(chooseLanguage(_:)), keyEquivalent: "")
+            entry.target = self; entry.representedObject = preference.rawValue
+            entry.state = L10n.preference == preference ? .on : .off
+        }
+        return menu
+    }
+    @objc func chooseLanguage(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String,
+              let preference = LanguagePreference(rawValue: value) else { return }
+        _ = changeLanguage(to: preference)
+    }
+    @discardableResult func changeLanguage(to preference: LanguagePreference) -> Manager? {
+        guard !working, window?.attachedSheet == nil, addSheet == nil else { return nil }
+        guard L10n.preference != preference else { return self }
+        L10n.setPreference(preference)
+        // Recreate native controls to refresh titles, accessibility, tooltips and
+        // menus together. This changes presentation only; no backend call is made.
+        let replacement = Manager()
+        replacement.request = request; replacement.openRequest = openRequest
+        replacement.runtimeReady = runtimeReady
+        replacement.activityStore = activityStore
+        replacement.signatureIssues = signatureIssues
+        let originalMessage = (status.stringValue == languageSwitchNotice ? previousLanguageMessage : nil) ?? status.stringValue
+        replacement.previousLanguageMessage = originalMessage
+        if activityWarning != nil {
+            replacement.activityWarning = L("Không lưu được nhật ký hoạt động. Báo cáo runtime và bản sao lưu vẫn nằm trong thư mục Harbor.", "Could not save the activity log. Runtime reports and backups remain in the Harbor folder.")
+        }
+        replacement.prepareWindow()
+        replacement.window.appearance = window.appearance
+        replacement.window.setFrame(window.frame, display: false)
+        if let latestSummary { replacement.render(latestSummary, showSummary: false) }
+        // Keep the latest notice visible, including verification/recovery warnings.
+        // Original diagnostics are not translated or replaced by a stale success.
+        replacement.status.stringValue = L("Thông báo gần nhất (ngôn ngữ gốc):\n", "Latest message (original language):\n") + originalMessage
+        replacement.languageSwitchNotice = replacement.status.stringValue
+        let offset = scroll.contentView.bounds.origin
+        replacement.scroll.contentView.scroll(to: NSPoint(x: 0, y: min(offset.y, max(0, replacement.rows.bounds.height - replacement.scroll.contentView.bounds.height))))
+        replacement.scroll.reflectScrolledClipView(replacement.scroll.contentView)
+        replacement.setPhase(.idle)
+        if NSApp.delegate === self { NSApp.delegate = replacement }
+        Manager.active = replacement
+        window.close()
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        replacement.showWindow()
+        return replacement
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWindow(); return true }
@@ -400,17 +477,17 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         openAll.isEnabled = available && !profiles.isEmpty
         refresh.isEnabled = !working && window?.attachedSheet == nil; health.isEnabled = available; bannerAction.isEnabled = available
         sync.isEnabled = window?.attachedSheet == nil && (waiting || availability.isEnabled)
-        sync.title = waiting ? "Dừng chờ" : (availability.participantCount >= 2 ? "Đồng bộ \(availability.participantCount) tài khoản" : "Đồng bộ đã chọn")
+        sync.title = waiting ? L("Dừng chờ", "Stop waiting") : (availability.participantCount >= 2 ? L("Đồng bộ \(availability.participantCount) tài khoản", "Sync \(availability.participantCount) accounts") : L("Đồng bộ đã chọn", "Sync selected"))
         sync.image = NSImage(systemSymbolName: waiting ? "xmark.circle" : "arrow.triangle.2.circlepath", accessibilityDescription: nil)
         sync.toolTip = availability.explanation + " (⌘↩)"
         footer.stringValue = availability.explanation
-        selectionLabel.stringValue = profiles.contains(where: \.syncEnabled) ? "Đã chọn \(profiles.filter(\.syncEnabled).count) / \(profiles.count)" : "Chưa chọn tài khoản"
-        overviewLabel.stringValue = "\(profiles.count) tài khoản  ·  \(profiles.filter { $0.ready && !$0.health.contains(where: \.blocking) }.count) sẵn sàng  ·  \(profiles.filter(\.running).count) đang chạy"
+        selectionLabel.stringValue = profiles.contains(where: \.syncEnabled) ? L("Đã chọn \(profiles.filter(\.syncEnabled).count) / \(profiles.count)", "Selected \(profiles.filter(\.syncEnabled).count) / \(profiles.count)") : L("Chưa chọn tài khoản", "No accounts selected")
+        overviewLabel.stringValue = L("\(profiles.count) tài khoản  ·  \(profiles.filter { $0.ready && !$0.health.contains(where: \.blocking) }.count) sẵn sàng  ·  \(profiles.filter(\.running).count) đang chạy", "\(profiles.count) accounts  ·  \(profiles.filter { $0.ready && !$0.health.contains(where: \.blocking) }.count) ready  ·  \(profiles.filter(\.running).count) running")
         let unhealthy = profiles.filter { $0.health.contains(where: \.blocking) }.count
         healthBanner.isHidden = !recoveryNeeded && unhealthy == 0
-        bannerLabel.stringValue = recoveryNeeded ? "Có giao dịch cần phục hồi" : "\(unhealthy) tài khoản cần sửa bản Claude"
-        bannerHint.stringValue = recoveryNeeded ? "Đóng các bản Claude rồi vào Kiểm tra → Phục hồi để tiếp tục." : "Sửa bản app hoặc bỏ chọn tài khoản bị lỗi trước khi đồng bộ."
-        operationHeading.stringValue = working ? phase.title : "Hoạt động gần nhất"
+        bannerLabel.stringValue = recoveryNeeded ? L("Có giao dịch cần phục hồi", "An operation needs recovery") : L("\(unhealthy) tài khoản cần sửa bản Claude", "\(unhealthy) accounts need Claude repair")
+        bannerHint.stringValue = recoveryNeeded ? L("Đóng các bản Claude rồi vào Kiểm tra → Phục hồi để tiếp tục.", "Close Claude apps, then choose Check health → Recover to continue.") : L("Sửa bản app hoặc bỏ chọn tài khoản bị lỗi trước khi đồng bộ.", "Repair the app or deselect the affected account before syncing.")
+        operationHeading.stringValue = working ? phase.title : L("Hoạt động gần nhất", "Latest activity")
         status.toolTip = status.stringValue
         for case let row as NSStackView in rows.arrangedSubviews { for case let button as NSButton in row.arrangedSubviews { button.isEnabled = available } }
         if working { window?.styleMask.remove(.closable) } else { window?.styleMask.insert(.closable) }
@@ -422,7 +499,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
     func setPhase(_ value: OperationPhase) {
         phase = value
         if value == .idle {
-            menuStatus.title = runtimeReady ? (status.stringValue.components(separatedBy: "\n").first ?? value.title) : "Runtime chưa sẵn sàng — mở Harbor để kiểm tra"
+            menuStatus.title = runtimeReady ? (status.stringValue.components(separatedBy: "\n").first ?? value.title) : L("Runtime chưa sẵn sàng — mở Harbor để kiểm tra", "Runtime is not ready — open Harbor to check")
         } else { menuStatus.title = value.title }
         item?.button?.toolTip = menuStatus.title
         if value.isBusy { status.stringValue = value.title }
@@ -440,7 +517,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             _ = await load()
         } catch {
             runtimeReady = false
-            status.stringValue = "Không khởi tạo được runtime: " + error.localizedDescription
+            status.stringValue = L("Không khởi tạo được runtime: ", "Could not initialize runtime: ") + error.localizedDescription
         }
         setPhase(.idle)
     }
@@ -451,7 +528,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             return true
         } catch {
             runtimeReady = false; updateControls()
-            if showSummary { status.stringValue = "Không làm mới được: " + error.localizedDescription }
+            if showSummary { status.stringValue = L("Không làm mới được: ", "Could not refresh: ") + error.localizedDescription }
             return false
         }
     }
@@ -483,11 +560,11 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             }
         }
         if showSummary {
-            if let last = summary.lastSync { status.stringValue = "Đã đồng bộ \(last.sessions) phiên giữa \(last.profiles) tài khoản. \(last.filesChanged) tệp cập nhật.\nBản sao lưu được giữ trong Báo cáo & sao lưu."
-            } else { status.stringValue = "Chưa có báo cáo đồng bộ để hiển thị." }
+            if let last = summary.lastSync { status.stringValue = L("Đã đồng bộ \(last.sessions) phiên giữa \(last.profiles) tài khoản. \(last.filesChanged) tệp cập nhật.\nBản sao lưu được giữ trong Báo cáo & sao lưu.", "Synced \(last.sessions) sessions across \(last.profiles) accounts. \(last.filesChanged) files updated.\nBackups are available in Reports & backups.")
+            } else { status.stringValue = L("Chưa có báo cáo đồng bộ để hiển thị.", "No sync report to display yet.") }
             let pendingCount = profiles.filter { !$0.ready }.count
-            if pendingCount > 0 { status.stringValue += "\n\(pendingCount) tài khoản chờ đăng nhập hoặc mở tab Code." }
-            if recoveryNeeded { status.stringValue = "Cần phục hồi trước khi đồng bộ. Đóng các bản Claude rồi chọn Kiểm tra → Phục hồi." }
+            if pendingCount > 0 { status.stringValue += L("\n\(pendingCount) tài khoản chờ đăng nhập hoặc mở tab Code.", "\n\(pendingCount) accounts need sign-in or Code setup.") }
+            if recoveryNeeded { status.stringValue = L("Cần phục hồi trước khi đồng bộ. Đóng các bản Claude rồi chọn Kiểm tra → Phục hồi.", "Recovery is required before syncing. Close Claude apps, then choose Check health → Recover.") }
         }
         updateControls()
     }
@@ -512,7 +589,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
                 _ = try await request(["select", p.id, selected ? "true" : "false"])
                 recordActivity(.selection, .succeeded)
                 let refreshed = await load(showSummary: false)
-                status.stringValue = refreshed ? "Đã lưu lựa chọn đồng bộ cho \(p.name)." : "Đã lưu lựa chọn nhưng chưa làm mới được. Bấm Làm mới trước thao tác tiếp theo."
+                status.stringValue = refreshed ? L("Đã lưu lựa chọn đồng bộ cho \(p.name).", "Saved sync selection for \(p.name).") : L("Đã lưu lựa chọn nhưng chưa làm mới được. Bấm Làm mới trước thao tác tiếp theo.", "Selection saved, but refresh failed. Click Refresh before continuing.")
             } catch {
                 let message = error.localizedDescription
                 _ = await load(showSummary: false)
@@ -541,8 +618,8 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             let failures = await open(selected)
             let refreshed = await load(showSummary: false)
             recordActivity(.open, failures.isEmpty && refreshed ? .succeeded : .needsAttention)
-            status.stringValue = failures.isEmpty ? "Đã gửi yêu cầu mở \(selected.count) app Claude." : "Không mở được: " + failures.joined(separator: "; ")
-            if !refreshed { status.stringValue += "\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo." }
+            status.stringValue = failures.isEmpty ? L("Đã gửi yêu cầu mở \(selected.count) app Claude.", "Requested opening \(selected.count) Claude apps.") : L("Không mở được: ", "Could not open: ") + failures.joined(separator: "; ")
+            if !refreshed { status.stringValue += L("\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo.", "\nCould not refresh status; click Refresh before continuing.") }
             setPhase(.idle)
         }
     }
@@ -555,7 +632,7 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         addSheet = controller
         controller.onClose = { [weak self] in
             guard let self else { return }
-            if self.phase == .configuring { self.status.stringValue = "Đã đóng cửa sổ thêm tài khoản." }
+            if self.phase == .configuring { self.status.stringValue = L("Đã đóng cửa sổ thêm tài khoản.", "Closed the add-account window.") }
             self.addSheet = nil
             self.setPhase(.idle)
         }
@@ -571,13 +648,13 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
                     self.setPhase(.opening); failures = await self.open([profile])
                 }
                 self.recordActivity(.create, refreshed && failures.isEmpty ? .succeeded : .needsAttention)
-                self.status.stringValue = "Đã tạo tài khoản. Đăng nhập trong bản Claude mới, mở Code rồi bấm Làm mới."
-                if !refreshed { self.status.stringValue += "\nChưa làm mới được danh sách; app mới chưa được mở." }
-                if !failures.isEmpty { self.status.stringValue += "\nKhông mở được: " + failures.joined(separator: "; ") }
+                self.status.stringValue = L("Đã tạo tài khoản. Đăng nhập trong bản Claude mới, mở Code rồi bấm Làm mới.", "Account created. Sign in to the new Claude app, open Code, then click Refresh.")
+                if !refreshed { self.status.stringValue += L("\nChưa làm mới được danh sách; app mới chưa được mở.", "\nCould not refresh accounts; the new app has not been opened.") }
+                if !failures.isEmpty { self.status.stringValue += L("\nKhông mở được: ", "\nCould not open: ") + failures.joined(separator: "; ") }
             } catch {
                 self.recordActivity(.create, .failed)
                 self.setPhase(.configuring)
-                self.status.stringValue = "Chưa tạo được tài khoản. Kiểm tra thông báo trong cửa sổ thêm tài khoản."
+                self.status.stringValue = L("Chưa tạo được tài khoản. Kiểm tra thông báo trong cửa sổ thêm tài khoản.", "Could not create the account. Check the message in the add-account window.")
                 throw error
             }
         }
@@ -591,22 +668,22 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
                 let report = try JSONDecoder().decode(HealthReport.self, from: try await request(["doctor"]))
                 recordActivity(.health, report.ok ? .succeeded : .needsAttention)
                 applyHealthReport(report)
-                let alert = NSAlert(); alert.messageText = report.ok ? "Kiểm tra hoàn tất" : "Cần xử lý trước khi đồng bộ"
-                alert.informativeText = report.issues.isEmpty ? "Không phát hiện lỗi clone hoặc giao dịch dở dang." : report.issues.map { issue in
+                let alert = NSAlert(); alert.messageText = report.ok ? L("Kiểm tra hoàn tất", "Health check complete") : L("Cần xử lý trước khi đồng bộ", "Resolve these issues before syncing")
+                alert.informativeText = report.issues.isEmpty ? L("Không phát hiện lỗi clone hoặc giao dịch dở dang.", "No clone problems or unfinished operations found.") : report.issues.map { issue in
                     let name = profiles.first { $0.id == issue.profile }?.name ?? "Claude Harbor"
                     return name + ": " + issue.displayText + " [\(issue.code)]"
                 }.joined(separator: "\n")
-                alert.addButton(withTitle: "Đóng")
+                alert.addButton(withTitle: L("Đóng", "Close"))
                 let canRecover = report.issues.contains { ["pending_recovery", "interrupted_clone_repair"].contains($0.code) }
-                if canRecover { alert.addButton(withTitle: "Phục hồi") }
+                if canRecover { alert.addButton(withTitle: L("Phục hồi", "Recover")) }
                 let response = await alert.beginSheetModal(for: window)
                 if canRecover, response == .alertSecondButtonReturn {
                     setPhase(.recovering)
                     _ = try await request(["recover"])
                     recordActivity(.recovery, .succeeded)
                     let refreshed = await load(showSummary: false)
-                    status.stringValue = refreshed ? "Đã phục hồi giao dịch. Kiểm tra các profile trước khi đồng bộ lại." : "Đã phục hồi nhưng chưa làm mới được; bấm Làm mới."
-                } else { status.stringValue = report.ok ? "Kiểm tra hoàn tất. Xem trạng thái từng profile trong danh sách." : "Cần xử lý các vấn đề đã báo trước khi đồng bộ." }
+                    status.stringValue = refreshed ? L("Đã phục hồi giao dịch. Kiểm tra các profile trước khi đồng bộ lại.", "Operation recovered. Check profiles before syncing again.") : L("Đã phục hồi nhưng chưa làm mới được; bấm Làm mới.", "Recovered, but refresh failed; click Refresh.")
+                } else { status.stringValue = report.ok ? L("Kiểm tra hoàn tất. Xem trạng thái từng profile trong danh sách.", "Health check complete. See each profile in the list.") : L("Cần xử lý các vấn đề đã báo trước khi đồng bộ.", "Resolve the reported issues before syncing.") }
             } catch { recordActivity(phase == .recovering ? .recovery : .health, .failed); status.stringValue = error.localizedDescription }
             setPhase(.idle)
         }
@@ -616,25 +693,25 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         let profile = profiles[sender.tag]
         setPhase(.repairing)
         Task {
-            let alert = NSAlert(); alert.messageText = "Sửa \(profile.name)?"
-            alert.informativeText = "Đóng tất cả profile Claude trước khi sửa. Harbor tạo lại app từ /Applications/Claude.app và giữ thư mục đăng nhập, lịch sử riêng."
-            alert.addButton(withTitle: "Sửa bản Claude"); alert.addButton(withTitle: "Hủy")
+            let alert = NSAlert(); alert.messageText = L("Sửa \(profile.name)?", "Repair \(profile.name)?")
+            alert.informativeText = L("Đóng tất cả profile Claude trước khi sửa. Harbor tạo lại app từ /Applications/Claude.app và giữ thư mục đăng nhập, lịch sử riêng.", "Close all Claude profiles before repairing. Harbor rebuilds the app from /Applications/Claude.app and retains its separate login and history directories.")
+            alert.addButton(withTitle: L("Sửa bản Claude", "Repair Claude copy")); alert.addButton(withTitle: L("Hủy", "Cancel"))
             if await alert.beginSheetModal(for: window) == .alertFirstButtonReturn {
                 do {
                     _ = try await request(["repair", profile.id])
                     recordActivity(.repair, .succeeded)
                     signatureIssues[profile.id] = nil
                     let refreshed = await load(showSummary: false)
-                    status.stringValue = refreshed ? "Đã sửa \(profile.name). Có thể mở lại app." : "Đã sửa app nhưng chưa làm mới được; bấm Làm mới."
+                    status.stringValue = refreshed ? L("Đã sửa \(profile.name). Có thể mở lại app.", "Repaired \(profile.name). You can reopen the app.") : L("Đã sửa app nhưng chưa làm mới được; bấm Làm mới.", "App repaired, but refresh failed; click Refresh.")
                 } catch { recordActivity(.repair, .failed); status.stringValue = error.localizedDescription }
-            } else { status.stringValue = "Đã hủy sửa app."; recordActivity(.repair, .cancelled) }
+            } else { status.stringValue = L("Đã hủy sửa app.", "App repair cancelled."); recordActivity(.repair, .cancelled) }
             setPhase(.idle)
         }
     }
     @objc func showOperationDetails() {
         guard window.attachedSheet == nil else { return }
-        let alert = NSAlert(); alert.messageText = "Chi tiết hoạt động"
-        alert.addButton(withTitle: "Đóng")
+        let alert = NSAlert(); alert.messageText = L("Chi tiết hoạt động", "Activity details")
+        alert.addButton(withTitle: L("Đóng", "Close"))
         let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 540, height: 220))
         scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
         let text = NSTextView(frame: scroll.bounds)
@@ -660,13 +737,13 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
     func performSync() async {
         var previous: [Profile] = []; var closing = false; var syncApplied = false
         do {
-            status.stringValue = "Đang kiểm tra các phiên…"
+            status.stringValue = L("Đang kiểm tra các phiên…", "Checking sessions…")
             var check = try JSONDecoder().decode(Check.self, from: try await request(["check"]))
             while true {
                 if !check.errors.isEmpty { throw NSError(domain: "Sync", code: 1, userInfo: [NSLocalizedDescriptionKey: check.errors.joined(separator: "\n")]) }
                 if check.busy.isEmpty { break }
                 setPhase(.waiting)
-                status.stringValue = "Chờ trả lời xong: " + check.busy.joined(separator: "; ")
+                status.stringValue = L("Chờ trả lời xong: ", "Waiting for replies: ") + check.busyDescription(profiles: profiles)
                 try await Task.sleep(nanoseconds: 2_000_000_000)
                 check = try JSONDecoder().decode(Check.self, from: try await request(["check"]))
             }
@@ -679,31 +756,33 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
             for _ in 0..<150 {
                 if applications.allSatisfy(\.isTerminated) { break }; try await Task.sleep(nanoseconds: 200_000_000)
             }
-            guard applications.allSatisfy(\.isTerminated) else { throw NSError(domain: "Sync", code: 2, userInfo: [NSLocalizedDescriptionKey: "Một app chưa đóng được; chưa ghi dữ liệu đồng bộ."]) }
+            guard applications.allSatisfy(\.isTerminated) else { throw NSError(domain: "Sync", code: 2, userInfo: [NSLocalizedDescriptionKey: L("Một app chưa đóng được; chưa ghi dữ liệu đồng bộ.", "An app did not close; sync data has not been written.")]) }
             setPhase(.syncing)
             let report = try JSONDecoder().decode(Report.self, from: try await request(["sync"]))
             syncApplied = true
             setPhase(.verifying); _ = try await request(["verify"])
             setPhase(.reopening); let reopenFailures = await open(previous)
             let refreshed = await load(showSummary: false)
-            status.stringValue = "Đã đồng bộ \(report.sessions) phiên vào \(report.profiles) app. \(report.filesChanged) tệp cập nhật.\(report.newBranches > 0 ? " Giữ thêm \(report.newBranches) nhánh." : "")\nCó bản sao lưu trong Báo cáo & sao lưu."
-            if !reopenFailures.isEmpty { status.stringValue += "\nKhông mở lại được: " + reopenFailures.joined(separator: "; ") }
-            if !refreshed { status.stringValue += "\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo." }
-            if let warnings = report.warnings, warnings > 0 { status.stringValue += " Có \(warnings) cảnh báo; phiên/profile có dữ liệu lỗi được bỏ qua. Xem file và dòng lỗi trong history-audit.json qua Báo cáo & sao lưu." }
-            if let pending = report.pending, !pending.isEmpty { status.stringValue += " \(pending.count) profile chờ đăng nhập / khởi tạo Code." }
+            status.stringValue = L("Đã đồng bộ \(report.sessions) phiên vào \(report.profiles) app. \(report.filesChanged) tệp cập nhật.", "Synced \(report.sessions) sessions across \(report.profiles) apps. \(report.filesChanged) files updated.")
+            if report.newBranches > 0 { status.stringValue += L(" Giữ thêm \(report.newBranches) nhánh.", " Preserved \(report.newBranches) additional branches.") }
+            status.stringValue += L("\nCó bản sao lưu trong Báo cáo & sao lưu.", "\nA backup is available in Reports & backups.")
+            if !reopenFailures.isEmpty { status.stringValue += L("\nKhông mở lại được: ", "\nCould not reopen: ") + reopenFailures.joined(separator: "; ") }
+            if !refreshed { status.stringValue += L("\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo.", "\nCould not refresh status; click Refresh before continuing.") }
+            if let warnings = report.warnings, warnings > 0 { status.stringValue += L(" Có \(warnings) cảnh báo; phiên/profile có dữ liệu lỗi được bỏ qua. Xem file và dòng lỗi trong history-audit.json qua Báo cáo & sao lưu.", " \(warnings) warnings; sessions/profiles with invalid data were skipped. See file and line details in history-audit.json via Reports & backups.") }
+            if let pending = report.pending, !pending.isEmpty { status.stringValue += L(" \(pending.count) profile chờ đăng nhập / khởi tạo Code.", " \(pending.count) profiles need sign-in / Code setup.") }
             recordActivity(.sync, (report.warnings ?? 0) > 0 || !reopenFailures.isEmpty || !refreshed ? .needsAttention : .succeeded, report: report)
-        } catch is CancellationError { status.stringValue = "Đã dừng chờ, chưa thay đổi lịch sử."; recordActivity(.sync, .cancelled)
+        } catch is CancellationError { status.stringValue = L("Đã dừng chờ, chưa thay đổi lịch sử.", "Stopped waiting; history is unchanged."); recordActivity(.sync, .cancelled)
         } catch {
             let message = error.localizedDescription
             var failures: [String] = []
             if closing && !syncApplied { setPhase(.reopening); failures = await open(previous) }
             let refreshed = await load(showSummary: false)
             recordActivity(.sync, syncApplied ? .needsAttention : .failed)
-            status.stringValue = (syncApplied ? "Đã ghi đồng bộ nhưng chưa xác minh thành công: " : "Chưa hoàn tất: ") + message
-            if syncApplied { status.stringValue += "\nGiữ các app đã đóng; xem Báo cáo & sao lưu rồi xác minh thành công trước khi mở lại." }
-            if !failures.isEmpty { status.stringValue += "\nKhông mở lại được: " + failures.joined(separator: "; ") }
-            if !refreshed { status.stringValue += "\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo." }
-            else if recoveryNeeded { status.stringValue += "\nCần phục hồi: đóng các profile rồi chọn Kiểm tra → Phục hồi." }
+            status.stringValue = (syncApplied ? L("Đã ghi đồng bộ nhưng chưa xác minh thành công: ", "Sync was written but verification did not succeed: ") : L("Chưa hoàn tất: ", "Not completed: ")) + message
+            if syncApplied { status.stringValue += L("\nGiữ các app đã đóng; xem Báo cáo & sao lưu rồi xác minh thành công trước khi mở lại.", "\nApps remain closed; inspect Reports & backups and verify successfully before reopening.") }
+            if !failures.isEmpty { status.stringValue += L("\nKhông mở lại được: ", "\nCould not reopen: ") + failures.joined(separator: "; ") }
+            if !refreshed { status.stringValue += L("\nChưa làm mới được trạng thái; bấm Làm mới trước thao tác tiếp theo.", "\nCould not refresh status; click Refresh before continuing.") }
+            else if recoveryNeeded { status.stringValue += L("\nCần phục hồi: đóng các profile rồi chọn Kiểm tra → Phục hồi.", "\nRecovery required: close profiles, then choose Check health → Recover.") }
         }
         operation = nil; setPhase(.idle)
     }
@@ -711,9 +790,10 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
 #if !BACKEND_TEST
 @main struct EntryPoint {
     @MainActor static func main() {
-        let app = NSApplication.shared; let delegate = Manager()
-        app.setActivationPolicy(.regular); app.delegate = delegate
-        withExtendedLifetime(delegate) { app.run() }
+        let app = NSApplication.shared
+        Manager.active = Manager()
+        app.setActivationPolicy(.regular); app.delegate = Manager.active
+        app.run()
     }
 }
 

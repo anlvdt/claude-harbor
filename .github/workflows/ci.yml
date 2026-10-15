@@ -21,10 +21,14 @@ jobs:
         run: python3 -m unittest discover -s . -p 'test*.py'
       - name: Swift backend process tests
         run: |
-          swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o "$RUNNER_TEMP/BackendProcessTests"
+          swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o "$RUNNER_TEMP/BackendProcessTests"
           "$RUNNER_TEMP/BackendProcessTests"
-          swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o "$RUNNER_TEMP/AddProfileSheetTests"
+          swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o "$RUNNER_TEMP/AddProfileSheetTests"
           "$RUNNER_TEMP/AddProfileSheetTests"
+      - name: Localization tests
+        run: |
+          swiftc -D BACKEND_TEST Localization.swift tests/LocalizationTests.swift -o "$RUNNER_TEMP/LocalizationTests"
+          "$RUNNER_TEMP/LocalizationTests"
       - name: Build ad-hoc app, verified ZIP and SHA256
         run: python3 build.py --arch arm64
       - name: Verify release independently
@@ -41,9 +45,9 @@ jobs:
       - name: Retain candidate release assets
         uses: actions/upload-artifact@v4
         with:
-          name: Claude-Harbor-0.3.0-macOS-arm64-ad-hoc
+          name: Claude-Harbor-macOS-arm64-ad-hoc
           path: |
-            dist/Claude-Harbor-0.3.0-macOS-arm64.zip
-            dist/Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
+            dist/Claude-Harbor-*-macOS-arm64.zip
+            dist/Claude-Harbor-*-macOS-arm64.zip.sha256
           if-no-files-found: error
           retention-days: 14

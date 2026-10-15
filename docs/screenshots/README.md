@@ -6,12 +6,12 @@ The `claude-harbor-0.3.0-*.png` images were captured on 15 October 2026 from the
 - `claude-harbor-0.3.0-dark.png`: the same fixture, dark appearance.
 - `claude-harbor-0.3.0-add-account.png`: add-account form, light appearance.
 
-To reproduce on macOS, from the repository root:
+To capture the current UI on macOS, from the repository root (the test build forces Vietnamese independently of the host language):
 
 ```sh
-swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o /tmp/HarborScreenshotTests
+swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o /tmp/HarborScreenshotTests
 /tmp/HarborScreenshotTests --preview-suite /tmp/harbor-screenshots
-swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o /tmp/HarborSheetScreenshotTests
+swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o /tmp/HarborSheetScreenshotTests
 /tmp/HarborSheetScreenshotTests --preview /tmp/harbor-screenshots
 ```
 

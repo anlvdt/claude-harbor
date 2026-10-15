@@ -11,8 +11,8 @@ from pathlib import Path
 from verify_release import runtime_files, verify_release, write_checksum
 
 SOURCE = Path(__file__).resolve().parent
-VERSION = '0.3.0'
-BUILD_VERSION = '3'
+VERSION = '0.4.0'
+BUILD_VERSION = '4'
 
 
 def package_zip(app, asset):
@@ -41,7 +41,7 @@ def build(architecture='arm64', *, signing_identity=None, notary_profile=None):
     mac.mkdir(parents=True)
     runtime.mkdir(parents=True)
     subprocess.run(['/usr/bin/swiftc', '-parse-as-library', '-target', architecture + '-apple-macos14.0',
-                    str(SOURCE / 'AccountManager.swift'), str(SOURCE / 'HarborUI.swift'), str(SOURCE / 'AddProfileSheet.swift'), str(SOURCE / 'HistoryUI.swift'),
+                    str(SOURCE / 'Localization.swift'), str(SOURCE / 'AccountManager.swift'), str(SOURCE / 'HarborUI.swift'), str(SOURCE / 'AddProfileSheet.swift'), str(SOURCE / 'HistoryUI.swift'),
                     '-o', str(mac / 'ClaudeHarbor')], check=True)
     for name in runtime_files(SOURCE):
         shutil.copy2(SOURCE / name, runtime / name)
