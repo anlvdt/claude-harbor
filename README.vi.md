@@ -4,29 +4,50 @@
 
 Claude Harbor là app macOS nhỏ giúp tạo nhiều bản Claude Desktop thật, đăng nhập riêng từng tài khoản và tiếp tục lịch sử Code giữa các profile được chọn rõ ràng bằng một nút.
 
-[Bản đã phát hành: v0.2.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.2.0) · [English](README.md)
+[Bản mới nhất: v0.3.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.3.0) · [English](README.md)
 
-![Giao diện Claude Harbor](docs/screenshots/claude-harbor-native.png)
+![Giao diện Claude Harbor 0.3.0 ở chế độ sáng](docs/screenshots/claude-harbor-0.3.0-light.png)
+
+Ảnh chụp giao diện AppKit v0.3.0 ngày 15/10/2026, dùng tài khoản và lịch sử minh họa.
+
+<details>
+<summary>Xem giao diện tối</summary>
+
+![Claude Harbor 0.3.0 ở chế độ tối](docs/screenshots/claude-harbor-0.3.0-dark.png)
+
+</details>
 
 ## Cách dùng
 
 1. Cài Claude Desktop chính thức tại `/Applications/Claude.app`. Cần macOS 14+, Apple Silicon và Apple Command Line Tools (`xcode-select --install`).
-2. Tải ZIP từ Releases, giải nén rồi đặt **Claude Harbor.app** trong Applications.
+2. Tải [ZIP v0.3.0 cho Apple Silicon](https://github.com/anlvdt/claude-harbor/releases/download/v0.3.0/Claude-Harbor-0.3.0-macOS-arm64.zip), giải nén rồi đặt **Claude Harbor.app** trong Applications.
 3. Bấm **+ Thêm tài khoản**, đặt tên rồi đăng nhập trong bản Claude mới.
 4. Mở tab **Code**, tạo một phiên **Local**, quay lại Harbor bấm **Làm mới**.
-5. Khi có ít nhất hai profile sẵn sàng, chọn ô **Sync** ở các profile được phép chia sẻ lịch sử, rồi bấm **Đồng bộ đã chọn**. App chờ trả lời xong, đóng các app đang chạy, sao lưu và đồng bộ, rồi chỉ mở lại các app đã chạy trước đó.
+5. Khi có ít nhất hai profile sẵn sàng, chọn ô **Sync** ở các profile được phép chia sẻ lịch sử, rồi bấm **Đồng bộ đã chọn**. App chờ trả lời xong, đóng các app đang chạy, sao lưu và đồng bộ, xác minh kết quả rồi chỉ mở lại các app đã chạy trước đó. Nếu xác minh thất bại, các app vẫn đóng để bạn kiểm tra báo cáo.
 
 **Mở / Mở tất cả** để chạy các tài khoản đồng thời. Menu **C≋** trên thanh menu giúp mở nhanh và đồng bộ. **Báo cáo & hoạt động** xem kết quả gần đây và mở thư mục báo cáo/bản sao lưu.
 
-Bản ứng viên 0.3.0 (build 3) đã được chuẩn bị trong mã nguồn, chưa phát hành; ZIP công khai vẫn là v0.2.0. [Hướng dẫn release 0.3.0](docs/release-0.3.0.md) ghi rõ checksum, lựa chọn ký và phần chưa kiểm thử. Các thay đổi: tình trạng clone hiển thị ngay tại profile; nút **Sửa** tạo lại app khi đã đóng các profile; **Kiểm tra → Phục hồi** xử lý giao dịch dở dang. Cửa sổ và menu bar cùng báo tiến trình, chỉ cho dừng lúc chờ trả lời. Sau khi đồng bộ, Harbor xác minh lịch sử trước khi mở lại các app; lỗi xác minh và lỗi mở lại được báo riêng. Xem [hướng dẫn build](README.md#build-from-source) để dùng bản mới.
+**v0.3.0 (build 3) đã phát hành.** Tình trạng clone hiển thị ngay tại profile; nút **Sửa** tạo lại app khi đã đóng các profile; **Kiểm tra → Phục hồi** xử lý giao dịch dở dang. Cửa sổ và menu bar cùng báo tiến trình, chỉ cho dừng lúc chờ trả lời. [Hướng dẫn release](docs/release-0.3.0.md) ghi rõ cách kiểm tra checksum, lựa chọn ký và giới hạn kiểm thử.
 
 Giao diện mới co giãn theo cửa sổ và theo chế độ sáng/tối của macOS. Mỗi tài khoản có nhãn trạng thái, lựa chọn **Đồng bộ** và thao tác mở/sửa riêng; vùng đồng bộ giải thích rõ điều kiện còn thiếu. Form thêm tài khoản báo lỗi ngay tại trường tên và giữ nội dung nếu tạo thất bại. Phím tắt: **⌘N** thêm, **⌘O** mở tất cả, **⌘R** làm mới, **⌘I** kiểm tra và **⌘Return** đồng bộ.
 
-Bản công khai v0.2.0 và build mặc định ký ad-hoc, chưa được Apple notarize; macOS có thể yêu cầu bạn cho phép mở app tải về. Giao diện hiện bằng tiếng Việt. Build 0.3.0 hỗ trợ tùy chọn Developer ID + hardened runtime và notarization bằng identity/profile Keychain có sẵn; máy chuẩn bị release không có identity hợp lệ hay metadata profile notarytool nên chưa kiểm thử luồng Apple thực tế.
+Bản công khai v0.3.0 và build mặc định ký ad-hoc, chưa được Apple notarize; macOS có thể yêu cầu bạn cho phép mở app tải về. Giao diện hiện bằng tiếng Việt. Build 0.3.0 hỗ trợ tùy chọn Developer ID + hardened runtime và notarization bằng identity/profile Keychain có sẵn; máy chuẩn bị release không có identity hợp lệ hay metadata profile notarytool nên chưa kiểm thử luồng Apple thực tế.
 
 **Nhập lịch sử…** chọn thư mục cấu hình Code chứa `projects`, tùy chọn metadata Desktop và xác nhận các tài khoản nhận. **Xác minh lịch sử** kiểm tra riêng tính nhất quán. Hai thao tác cần ít nhất một profile đã chọn và sẵn sàng, đóng các clone và xử lý lỗi chặn/phục hồi trước. Nhật ký hoạt động chỉ lưu thời gian, loại thao tác, kết quả và số lượng; báo cáo chi tiết có thể chứa thông tin riêng tư.
 
-Smoke `python3 scripts/smoke_real_claude.py` chỉ chạy headless: tạo/ký/kiểm tra clone thật và sync/xác minh/sửa với lịch sử fixture, không mở Electron. Thử GUI với HOME tạm trước đó gây hộp thoại Keychain; đã xử lý bằng cách dừng tiến trình thử. Chưa xác nhận mở GUI, đăng nhập hay mở lại sau repair.
+![Form thêm tài khoản trong Claude Harbor 0.3.0](docs/screenshots/claude-harbor-0.3.0-add-account.png)
+
+## Kiểm tra bản tải về
+
+[CI macOS đã pass](https://github.com/anlvdt/claude-harbor/actions/runs/38706381191) tại commit release `ededb79`: **135 test Python**, hai bộ Swift, build arm64 và kiểm tra app/ZIP/SHA256. ZIP phát hành được lấy trực tiếp từ lần CI này.
+
+Tải cả ZIP và [tệp SHA256](https://github.com/anlvdt/claude-harbor/releases/download/v0.3.0/Claude-Harbor-0.3.0-macOS-arm64.zip.sha256) vào cùng thư mục, rồi chạy:
+
+```sh
+shasum -a 256 -c Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
+```
+
+Bộ thử headless tạo/sửa clone Claude thật và sync/xác minh dữ liệu mẫu, không mở Electron. Đã kiểm tra nâng cấp Harbor và trình xem báo cáo trên app đã cài. Đăng nhập, trả lời Code thật và mở lại clone sau repair vẫn cần kiểm thử thủ công.
 
 ## Đã hỗ trợ
 
