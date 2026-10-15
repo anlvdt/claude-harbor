@@ -6,14 +6,14 @@ Claude Harbor is a small native macOS app that creates independent copies of you
 
 [Latest release: v0.4.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.4.0) · [Tiếng Việt](README.vi.md) · [How sync works](docs/session-sync.md)
 
-![Claude Harbor 0.3.0 account manager in light appearance](docs/screenshots/claude-harbor-0.3.0-light.png)
+![Claude Harbor 0.4.0 in English, light appearance](docs/screenshots/claude-harbor-0.4.0-en-light.png)
 
-Native AppKit screenshots from v0.3.0, captured on 15 October 2026 with demonstration accounts and history. The screenshots show Vietnamese; v0.4.0 also supports English.
+English screenshots of the native v0.4.0 interface, captured on 15 October 2026 using demonstration accounts and history. Choose **Language / Ngôn ngữ → English** to use this interface.
 
 <details>
 <summary>View dark appearance</summary>
 
-![Claude Harbor 0.3.0 in dark appearance](docs/screenshots/claude-harbor-0.3.0-dark.png)
+![Claude Harbor 0.4.0 in English, dark appearance](docs/screenshots/claude-harbor-0.4.0-en-dark.png)
 
 </details>
 
@@ -29,7 +29,16 @@ Native AppKit screenshots from v0.3.0, captured on 15 October 2026 with demonstr
 - **Use the menu bar:** launch profiles or sync without keeping the manager window open.
 - **Recover safely:** inspect reports and backups, recover an interrupted transaction before another write, and run health checks or repair a stale clone.
 
-![Adding a separate Claude account in v0.3.0](docs/screenshots/claude-harbor-0.3.0-add-account.png)
+<img src="docs/screenshots/claude-harbor-0.4.0-en-add-account.png" alt="English add-account form in Claude Harbor 0.4.0" width="520">
+
+<details>
+<summary>Reports & Activity in English</summary>
+
+![English reports and activity viewer in Claude Harbor 0.4.0](docs/screenshots/claude-harbor-0.4.0-en-reports.png)
+
+The example shows sync totals, verification results and recent activity. Detailed reports and backups stay on your Mac.
+
+</details>
 
 ## Install
 
