@@ -6,14 +6,14 @@ Claude Harbor là app macOS nhỏ giúp tạo nhiều bản Claude Desktop thậ
 
 [Bản mới nhất: v0.4.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.4.0) · [English](README.md)
 
-![Giao diện Claude Harbor 0.3.0 ở chế độ sáng](docs/screenshots/claude-harbor-0.3.0-light.png)
+![Claude Harbor 0.4.0 bằng tiếng Anh ở chế độ sáng](docs/screenshots/claude-harbor-0.4.0-en-light.png)
 
-Ảnh chụp giao diện AppKit v0.3.0 ngày 15/10/2026, dùng tài khoản và lịch sử minh họa.
+Ảnh chụp giao diện tiếng Anh của AppKit v0.4.0 ngày 15/10/2026, dùng tài khoản và lịch sử minh họa. Chọn **Language / Ngôn ngữ → English** để dùng giao diện này.
 
 <details>
 <summary>Xem giao diện tối</summary>
 
-![Claude Harbor 0.3.0 ở chế độ tối](docs/screenshots/claude-harbor-0.3.0-dark.png)
+![Claude Harbor 0.4.0 bằng tiếng Anh ở chế độ tối](docs/screenshots/claude-harbor-0.4.0-en-dark.png)
 
 </details>
 
@@ -35,7 +35,16 @@ Bản công khai v0.4.0 và build mặc định ký ad-hoc, chưa được Apple
 
 **Nhập lịch sử…** chọn thư mục cấu hình Code chứa `projects`, tùy chọn metadata Desktop và xác nhận các tài khoản nhận. **Xác minh lịch sử** kiểm tra riêng tính nhất quán. Hai thao tác cần ít nhất một profile đã chọn và sẵn sàng, đóng các clone và xử lý lỗi chặn/phục hồi trước. Nhật ký hoạt động chỉ lưu thời gian, loại thao tác, kết quả và số lượng; báo cáo chi tiết có thể chứa thông tin riêng tư.
 
-![Form thêm tài khoản trong Claude Harbor 0.3.0](docs/screenshots/claude-harbor-0.3.0-add-account.png)
+<img src="docs/screenshots/claude-harbor-0.4.0-en-add-account.png" alt="Form thêm tài khoản bằng tiếng Anh trong Claude Harbor 0.4.0" width="520">
+
+<details>
+<summary>Xem Reports & Activity bằng tiếng Anh</summary>
+
+![Báo cáo và nhật ký bằng tiếng Anh trong Claude Harbor 0.4.0](docs/screenshots/claude-harbor-0.4.0-en-reports.png)
+
+Ví dụ gồm kết quả đồng bộ, xác minh và các thao tác gần đây. Báo cáo chi tiết và bản sao lưu được giữ trên máy của bạn.
+
+</details>
 
 ## Kiểm tra bản tải về
 
