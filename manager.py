@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Native manager backend. stdout carries small JSON results only."""
-import fcntl, json, os, plistlib, shutil, subprocess, sys, tempfile, uuid
+import fcntl, json, os, plistlib, shlex, shutil, subprocess, sys, tempfile, uuid
 from pathlib import Path
 import profile_store as store
 import desktop_sync as sync
 import profile_health
+import sync_transaction
+from backend_protocol import BackendError, VERSION, FEATURES, envelope, encode
 from safe_io import atomic_write, private_dir, digest, fsync_dir
 
 ROOT=store.ROOT
@@ -49,7 +51,7 @@ def select_profile(profile_id, enabled):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         profiles = store.load()
         p = next((p for p in profiles if p['id'] == profile_id), None)
-        if p is None: raise ValueError('Unknown profile')
+        if p is None: raise BackendError('profile_missing')
         p['syncEnabled'] = enabled
         store.save(profiles)
     return {'selected': enabled}
@@ -68,16 +70,35 @@ def status():
                 try:
                     record=json.loads(f.read_text()); archived+=bool(record.get('isArchived',record.get('archived',False)))
                 except (OSError, ValueError, AttributeError):pass
-        result.append({**{k:v for k,v in p.items() if k!='legacyAccount'},'syncEnabled':p.get('syncEnabled',False),'ready':ready,'running':p['id'] in running,'sessions':count,'archived':archived})
+        result.append({**{k:v for k,v in p.items() if k!='legacyAccount'},'syncEnabled':p.get('syncEnabled',False),'ready':ready,'running':p['id'] in running,'sessions':count,'archived':archived,
+                       'health':profile_health.inspect_profile(p)})
     last=None
     try:
         if (ROOT/'last-sync.json').exists():
             last=json.loads((ROOT/'last-sync.json').read_text())
-            if not isinstance(last, dict) or any(not isinstance(last.get(k), int) for k in ('profiles','sessions','newBranches','filesChanged')) or not isinstance(last.get('backup'),str):
+            if (not isinstance(last, dict)
+                    or any(type(last.get(k)) is not int or last[k] < 0 for k in ('profiles','sessions','newBranches','filesChanged'))
+                    or not isinstance(last.get('backup'),str)
+                    or (last.get('warnings') is not None and (type(last['warnings']) is not int or last['warnings'] < 0))
+                    or (last.get('pending') is not None and (not isinstance(last['pending'],list) or any(not isinstance(p,str) for p in last['pending'])))):
                 raise ValueError('Invalid sync report')
     except (OSError,ValueError):
         last=None; pending.append('Báo cáo cũ bị lỗi; profile vẫn có thể sử dụng.')
-    return {'profiles':result,'pending':pending,'lastSync':last}
+    return {'profiles':result,'pending':pending,'lastSync':last,'issues':recovery_issues()}
+
+
+def recovery_issues():
+    """Read-only recovery summary; never include journal contents or private paths."""
+    issues=[]
+    try:
+        if sync_transaction.pending(ROOT):
+            issues.append({'code':'pending_recovery','blocking':True,'detail':'Có lượt đồng bộ chưa hoàn tất. Đóng các profile rồi phục hồi.'})
+        path=ROOT/'clone-repair.json'
+        if path.exists() and json.loads(path.read_text()).get('state')=='active':
+            issues.append({'code':'interrupted_clone_repair','blocking':True,'detail':'Có lượt sửa clone chưa hoàn tất. Đóng các profile rồi phục hồi.'})
+    except (OSError,ValueError,TypeError,AttributeError,KeyError):
+        issues.append({'code':'recovery_unreadable','blocking':True,'detail':'Không đọc được nhật ký phục hồi. Giữ lại bản sao lưu và kiểm tra dữ liệu.'})
+    return issues
 
 def recover_clone_repair():
     path=ROOT/'clone-repair.json'
@@ -96,15 +117,46 @@ def recover_clone_repair():
 
 
 def doctor():
-    issues=[]
+    issues=recovery_issues()
     for p in store.load(): issues.extend(profile_health.inspect_profile(p,verify_signature=True))
-    journal=ROOT/'clone-repair.json'
-    if journal.exists() and json.loads(journal.read_text()).get('state')=='active':
-        issues.append({'code':'interrupted_clone_repair','blocking':True,'detail':'Run repair again while all profiles are closed.'})
-    for path in (ROOT/'sync-backups').glob('*/journal.json'):
-        if json.loads(path.read_text()).get('state')=='active':
-            issues.append({'code':'pending_recovery','blocking':True,'detail':'Run recover with all profiles closed: '+str(path.parent)})
     return {'issues':issues,'ok':not any(i['blocking'] for i in issues)}
+
+
+def require_idle_import_source(root, desktop_root=None):
+    """Conservatively reject visible writers/live sessions, including pauses between writes.
+
+    This is an admission check, not a cooperative lock on third-party tools.
+    Snapshot validation still checks source bytes before transaction commit.
+    """
+    root=Path(root).resolve()
+    roots=[root, *([Path(desktop_root).resolve()] if desktop_root else [])]
+    def references_source(word):
+        value=word.split('=',1)[-1]
+        if not value.startswith('/'): return False
+        return any(Path(value).resolve().is_relative_to(folder) for folder in roots)
+    session_ids={p.stem for p in (root/'projects').glob('*/*.jsonl')}
+    for line in sync.processes():
+        try: words=shlex.split(line)
+        except ValueError: continue
+        if not words: continue
+        executable=Path(words[0]).name.lower()
+        is_claude=executable in ('claude','claude.bin') or (
+            executable in ('node','bun') and any('claude-code' in w for w in words[1:3]))
+        if not is_claude: continue
+        if (root == (Path.home()/'.claude').resolve()
+                or any(references_source(w) for w in words[1:])
+                or any(sid in line for sid in session_ids)):
+            raise BackendError('import_source_busy')
+    for folder in roots:
+        try:
+            check=subprocess.run(['/usr/sbin/lsof','-n','-P','-F','a','+D',str(folder)],
+                                 capture_output=True,text=True,timeout=15)
+        except (OSError,subprocess.TimeoutExpired):
+            raise BackendError('import_source_unchecked') from None
+        if check.returncode not in (0,1) or check.stderr.strip():
+            raise BackendError('import_source_unchecked')
+        if any(line in ('aw','au') for line in check.stdout.splitlines()):
+            raise BackendError('import_source_busy')
 
 
 def import_history(arguments):
@@ -120,29 +172,36 @@ def import_history(arguments):
     if not (root/'projects').is_dir(): raise ValueError('Source has no projects directory')
     if any(root == sync.code(p).resolve() for p in sync.NAMES): raise ValueError('Use sync for managed sources')
     sync.NAMES={p:sync.NAMES[p] for p in targets}
+    desktop_root=Path(args.desktop_root).expanduser().resolve() if args.desktop_root else None
+    if desktop_root and not desktop_root.is_dir(): raise ValueError('Desktop metadata root is not a directory')
+    binding_validator=sync.BINDING_VALIDATOR
+    def validate_import():
+        binding_validator()
+        require_idle_import_source(root,desktop_root)
+    sync.BINDING_VALIDATOR=validate_import
     sync.HISTORY_ROOTS=[root]; sync.EXTERNAL_TARGETS={str(root):sorted(targets)}
-    sync.DESKTOP_ROOTS=[Path(args.desktop_root).expanduser().resolve()] if args.desktop_root else []
+    sync.DESKTOP_ROOTS=[desktop_root] if desktop_root else []
     return {**sync.sync_all(),'pending':pending}
 
 
 def repair(profile_id):
     profile=next((p for p in store.load() if p['id']==profile_id),None)
-    if profile is None: raise ValueError('Unknown profile')
+    if profile is None: raise BackendError('profile_missing')
     return create(profile['name'],profile['kind'],repair_id=profile_id)
 
 
 def create(name,kind,repair_id=None):
     name=name.strip()
-    if not name or len(name)>60 or any(c in name for c in '/\\:\0\n'):raise ValueError('Tên cần 1–60 ký tự, không chứa /, \\, : hoặc xuống dòng.')
-    if kind not in ('claude','magpie'):raise ValueError('Loại profile không hợp lệ')
+    if not name or len(name)>60 or any(c in name for c in '/\\:\0\n'):raise BackendError('invalid_profile_name')
+    if kind not in ('claude','magpie'):raise BackendError('invalid_request')
     source=SOURCE
-    if not source.exists():raise ValueError('Cần cài Claude chính thức tại /Applications/Claude.app.')
+    if not source.exists():raise BackendError('source_unavailable')
     private_dir(ROOT)
     with (ROOT/'registry.lock').open('a') as registry_lock, (ROOT/'sync.lock').open('a') as lock:
         fcntl.flock(registry_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         profiles=store.load()
-        if running(profiles): raise ValueError('Đóng tất cả profile trước khi tạo/sửa clone.')
+        if running(profiles): raise BackendError('profiles_running')
         recover_clone_repair()
         profiles=store.load(); apps=Path.home()/'Applications'; apps.mkdir(exist_ok=True)
         display=name if name.lower().startswith('claude') else 'Claude '+name
@@ -152,7 +211,7 @@ def create(name,kind,repair_id=None):
         if previous:
             pid=previous['id']; bid=previous['bundleID']; target=Path(previous['bundle']); display=previous['name']; kind=previous['kind']
         else:
-            if target.exists() or any(p['name']==display for p in profiles): raise ValueError('Tên này đã được sử dụng. Chọn tên khác.')
+            if target.exists() or any(p['name']==display for p in profiles): raise BackendError('duplicate_profile')
             pid='p'+uuid.uuid4().hex[:12]; bid='local.anle.claude.desktop.'+pid
         base=ROOT/'profiles'/pid; stage=Path(tempfile.mkdtemp(prefix='clone-',dir=ROOT)); clone=stage/'Claude.app'
         try:
@@ -212,39 +271,75 @@ def create(name,kind,repair_id=None):
             raise
         finally:shutil.rmtree(stage)
 
-if __name__=='__main__':
+def dispatch(arguments):
+    command=arguments[0] if arguments else 'status'
+    args=arguments[1:]
+    arities={'status':0,'capabilities':0,'doctor':0,'verify':0,'check':0,'sync':0,
+             'recover':0,'repair':1,'select':2,'create':2}
+    if command!='import' and (command not in arities or len(args)!=arities[command]):
+        raise BackendError('invalid_request')
+    if command=='capabilities': return {'protocolVersion':VERSION,'features':list(FEATURES)}
+    if command=='status': return status()
+    if command=='import': return import_history(args)
+    if command=='doctor': return doctor()
+    if command=='repair': return repair(args[0])
+    if command=='select':
+        if args[1] not in ('true','false'): raise BackendError('invalid_request')
+        return select_profile(args[0],args[1]=='true')
+    if command=='create': return create(*args)
+    if command=='recover':
+        profiles,pending=configure()
+        private_dir(ROOT)
+        with (ROOT/'registry.lock').open('a') as registry_lock, (ROOT/'sync.lock').open('a') as lock:
+            fcntl.flock(registry_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            if running(profiles): raise BackendError('profiles_running')
+            recover_clone_repair()
+            return {'recovered':sync.recover_transactions()}
+    profiles,pending=configure()
+    if command=='verify':
+        from verify_coverage import verify
+        if not sync.NAMES: raise BackendError('profiles_not_ready')
+        private_dir(ROOT)
+        with (ROOT/'sync.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            if running(profiles): raise BackendError('profiles_running')
+            result=verify(sync)
+            atomic_write(ROOT/'last-verification.json', sync.json_bytes(result))
+            if any(result[k] for k in ('incompleteGroups','missingTranscripts','conversationMismatches','auxiliaryMismatches','duplicateMembers','recordErrors')):
+                raise BackendError('verification_failed', legacy_result=result)
+            return result
+    if len(sync.NAMES)<2: raise BackendError('profiles_not_ready')
+    for p in profiles:
+        if p['id'] in sync.NAMES and any(i['blocking'] for i in profile_health.inspect_profile(p)):
+            raise BackendError('clone_stale')
+    if command=='check':
+        if recovery_issues(): raise BackendError('recovery_required')
+        return {**sync.preflight(),'pending':pending,'eligible':list(sync.NAMES)}
+    return {**sync.sync_all(),'pending':pending}
+
+
+def main(arguments=None):
+    import contextlib
+    import io
+    args=list(sys.argv[1:] if arguments is None else arguments)
+    desktop=bool(args and args[0]=='--desktop-api')
     try:
-        command=sys.argv[1] if len(sys.argv)>1 else 'status'
-        if command=='status':result=status()
-        elif command=='import': result=import_history(sys.argv[2:])
-        elif command=='verify':
-            from verify_coverage import verify
-            profiles,pending=configure()
-            if not sync.NAMES: raise ValueError('Select initialized profiles before verification')
-            with (ROOT/'sync.lock').open('a') as lock:
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                if running(profiles): raise ValueError('Close profiles before verification')
-                result=verify(sync)
-                if any(result[k] for k in ('incompleteGroups','missingTranscripts','conversationMismatches','auxiliaryMismatches','duplicateMembers','recordErrors')):
-                    print(json.dumps(result,ensure_ascii=False)); sys.exit(1)
-        elif command=='doctor': result=doctor()
-        elif command=='repair': result=repair(sys.argv[2])
-        elif command=='recover':
-            profiles,pending=configure()
-            with (ROOT/'registry.lock').open('a') as registry_lock, (ROOT/'sync.lock').open('a') as lock:
-                fcntl.flock(registry_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                if running(profiles): raise ValueError('Close all profiles before recovery')
-                recover_clone_repair()
-                result={'recovered':sync.recover_transactions()}
-        elif command=='select': result=select_profile(sys.argv[2], sys.argv[3]=='true')
-        elif command=='create': result=create(sys.argv[2],sys.argv[3])
-        elif command in ('check','sync'):
-            profiles,pending=configure()
-            if len(sync.NAMES)<2:raise ValueError('Cần ít nhất hai profile đã đăng nhập và mở tab Code.')
-            if command=='check':result={**sync.preflight(),'pending':pending,'eligible':list(sync.NAMES)}
-            else:result={**sync.sync_all(),'pending':pending}
-        else:raise ValueError('Lệnh không hợp lệ')
-        print(json.dumps(result,ensure_ascii=False))
-    except BlockingIOError: print('Đóng các profile đang chạy hoặc chờ thao tác hiện tại hoàn tất.',file=sys.stderr);sys.exit(1)
-    except Exception as e:print(str(e),file=sys.stderr);sys.exit(1)
+        if desktop:
+            if len(args)<2 or args[1]!=str(VERSION): raise BackendError('protocol_incompatible')
+            args=args[2:]
+        # argparse may emit raw argument values before raising SystemExit.
+        with contextlib.redirect_stderr(io.StringIO()) if desktop else contextlib.nullcontext():
+            result=dispatch(args)
+        print(encode(envelope(result=result) if desktop else result))
+        return 0
+    except (Exception,SystemExit) as error:
+        if isinstance(error,SystemExit): error=BackendError('invalid_request')
+        if desktop: print(encode(envelope(error=error)))
+        elif isinstance(error,BackendError) and error.legacy_result is not None:
+            print(encode(error.legacy_result))
+        else: print(str(error),file=sys.stderr)
+        return 1
+
+
+if __name__=='__main__': sys.exit(main())
