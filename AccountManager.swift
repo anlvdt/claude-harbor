@@ -661,14 +661,14 @@ func backend(_ arguments: [String], directory: URL = root, environment: [String:
         var previous: [Profile] = []; var closing = false; var syncApplied = false
         do {
             status.stringValue = "Đang kiểm tra các phiên…"
-            var check: Check
+            var check = try JSONDecoder().decode(Check.self, from: try await request(["check"]))
             while true {
-                check = try JSONDecoder().decode(Check.self, from: try await request(["check"]))
                 if !check.errors.isEmpty { throw NSError(domain: "Sync", code: 1, userInfo: [NSLocalizedDescriptionKey: check.errors.joined(separator: "\n")]) }
                 if check.busy.isEmpty { break }
                 setPhase(.waiting)
                 status.stringValue = "Chờ trả lời xong: " + check.busy.joined(separator: "; ")
                 try await Task.sleep(nanoseconds: 2_000_000_000)
+                check = try JSONDecoder().decode(Check.self, from: try await request(["check"]))
             }
             try Task.checkCancellation()
             let closingProfiles = profiles.filter { check.running.contains($0.id) }
