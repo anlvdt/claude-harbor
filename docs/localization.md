@@ -1,4 +1,4 @@
-# Harbor language support — upcoming 0.4.0
+# Harbor language support — 0.4.0
 
 Harbor supports English and Vietnamese through a saved `HarborLanguage` preference in its application UserDefaults domain. The main menu and menu-bar icon expose **Language / Ngôn ngữ → System, English, Tiếng Việt**. System selects the first supported macOS preferred language and falls back to English. Native macOS-owned dialogs/errors follow macOS settings.
 
@@ -15,4 +15,4 @@ Switching language is allowed only while idle with no attached dialog. It rebuil
 - Installed Harbor at `~/Applications/Claude Harbor.app`, retaining the previous app under `~/Library/Application Support/ClaudeHarborAppBackups/20261015-155158/`.
 - Verified real UI switching English → Vietnamese → English, opened/cancelled the English add-account form, and opened/closed the English report viewer. The saved preference is English. Installed app/runtime match source; registry bytes and sync selections are unchanged.
 
-No real-profile sync, repair, login, history import or credential changes were performed. The public download remains v0.3.0 until a separate release is authorized.
+No real-profile sync, repair, login, history import or credential changes were performed. The v0.4.0 release notes record the successful GitHub CI run and artifact checksum used for distribution.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — v0.4.0
+## v0.4.0 — 2026-10-15
 
 - Add English and Vietnamese UI with a persistent System / English / Tiếng Việt menu in both the main menu and menu bar.
 - Switch the complete native interface while idle without restarting the app or calling backend operations; preserve account choices, health, window size and scroll position.

@@ -4,11 +4,11 @@
 
 Claude Harbor is a small native macOS app that creates independent copies of your installed Claude Desktop, keeps each account's login separate, and synchronizes local Claude Code history between explicitly selected ready profiles with one click.
 
-[Latest release: v0.3.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.3.0) · [Tiếng Việt](README.vi.md) · [How sync works](docs/session-sync.md)
+[Latest release: v0.4.0](https://github.com/anlvdt/claude-harbor/releases/tag/v0.4.0) · [Tiếng Việt](README.vi.md) · [How sync works](docs/session-sync.md)
 
 ![Claude Harbor 0.3.0 account manager in light appearance](docs/screenshots/claude-harbor-0.3.0-light.png)
 
-Native AppKit screenshots from v0.3.0, captured on 15 October 2026 with demonstration accounts and history. The interface is currently Vietnamese.
+Native AppKit screenshots from v0.3.0, captured on 15 October 2026 with demonstration accounts and history. The screenshots show Vietnamese; v0.4.0 also supports English.
 
 <details>
 <summary>View dark appearance</summary>
@@ -36,22 +36,22 @@ Native AppKit screenshots from v0.3.0, captured on 15 October 2026 with demonstr
 The release provides an **Apple Silicon (arm64)** app for **macOS 14 or later**. Install [Claude Desktop](https://claude.com/download) in `/Applications/Claude.app` first. Harbor creates clones locally; it does not ship Claude's binaries.
 
 1. Install Apple Command Line Tools if you do not already have them: `xcode-select --install`. Harbor uses `/usr/bin/python3` for its local backend and `clang`/`codesign` when creating profiles.
-2. Download `Claude-Harbor-0.3.0-macOS-arm64.zip` from [Releases](https://github.com/anlvdt/claude-harbor/releases/tag/v0.3.0).
+2. Download `Claude-Harbor-0.4.0-macOS-arm64.zip` from [Releases](https://github.com/anlvdt/claude-harbor/releases/tag/v0.4.0).
 3. Extract it and move **Claude Harbor.app** into `/Applications` or `~/Applications`.
-4. Open it, choose **+ Thêm tài khoản**, name a profile, then sign in within the new Claude window.
-5. Open the **Code** tab, create a **Local** session, and click **Làm mới** in Harbor. After at least two profiles are ready, select **Sync** on the profiles that may share history, then click **Đồng bộ đã chọn**.
+4. Open it, choose **Add account / Thêm tài khoản**, name a profile, then sign in within the new Claude window.
+5. Open the **Code** tab, create a **Local** session, and click **Refresh / Làm mới** in Harbor. After at least two profiles are ready, select **Sync** on the profiles that may share history, then click **Sync selected / Đồng bộ đã chọn**.
 
-The v0.3.0 download has a Vietnamese interface. The release is **ad-hoc signed, not Apple notarized**; macOS may require your explicit approval to open the downloaded app. Building from source is also supported.
+Choose English, Tiếng Việt or System from the Language / Ngôn ngữ menu. The release is **ad-hoc signed, not Apple notarized**; macOS may require your explicit approval to open the downloaded app. Building from source is also supported.
 
 Existing installations from the earlier local prototype are retained in `~/Library/Application Support/ClaudeThreeDesktop`. New installations use `~/Library/Application Support/ClaudeHarbor`.
 
-## Language support in the upcoming v0.4.0
+## Language support
 
-Source builds on `codex/english-ui` add **English and Tiếng Việt**. Choose **Language / Ngôn ngữ → System, English, or Tiếng Việt** from the main menu or menu-bar icon. System selects a supported macOS preferred language, falling back to English. The choice is saved and takes effect immediately while Harbor is idle. Finish the current operation or close its dialog before switching.
+Version 0.4.0 supports **English and Tiếng Việt**. Choose **Language / Ngôn ngữ → System, English, or Tiếng Việt** from the main menu or menu-bar icon. System selects a supported macOS preferred language, falling back to English. The choice is saved and takes effect immediately while Harbor is idle. Finish the current operation or close its dialog before switching.
 
-Only Harbor-owned interface text is translated. Account names, history content and original reports remain unchanged; macOS-owned dialogs and system errors follow macOS language settings. This update has not been published; the public download above remains v0.3.0.
+Only Harbor-owned interface text is translated. Account names, history content and original reports remain unchanged; macOS-owned dialogs and system errors follow macOS language settings. The latest notice is kept in its original language when switching, so existing warnings are not hidden.
 
-## Scope of v0.3.0
+## Scope of v0.4.0
 
 **Supported:** readable **local Code sessions on the same Mac** from explicitly selected profiles, including conversation transcripts, Desktop session records, previous session chains and relevant per-session files when copying history. Profile credentials and target permissions stay separate. Harbor checks clone health before writes and can repair a closed stale clone while retaining its profile data.
 
@@ -61,10 +61,10 @@ The optional Magpie profile preset targets the tested local gateway at `http://1
 
 ## Validation
 
-Version **0.3.0 (build 3)** is [publicly available](https://github.com/anlvdt/claude-harbor/releases/tag/v0.3.0). [macOS CI passed](https://github.com/anlvdt/claude-harbor/actions/runs/38706381191) for release commit `ededb79`: 135 Python tests, both Swift suites, the arm64 build, exact bundle/ZIP checks and SHA256 verification. Release assets come directly from that successful run. The download includes a `.zip.sha256` sidecar:
+Version **0.4.0 (build 4)** includes 147 Python tests, native backend/UI and add-account-sheet tests, and localization tests covering all 16 backend error codes. [macOS CI](https://github.com/anlvdt/claude-harbor/actions/workflows/ci.yml) builds and verifies the app, ZIP and SHA256. The release notes link the exact successful run used for its attached assets. The download includes a `.zip.sha256` sidecar:
 
 ```sh
-shasum -a 256 -c Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
+shasum -a 256 -c Claude-Harbor-0.4.0-macOS-arm64.zip.sha256
 ```
 
 Download the ZIP and its sidecar into the same folder first. See the [release guide](docs/release-0.3.0.md) for signing options and validation limits.
@@ -84,7 +84,7 @@ Requires Python 3, Swift and Apple Command Line Tools. No third-party Python pac
 ```sh
 git clone https://github.com/anlvdt/claude-harbor.git
 cd claude-harbor
-git checkout codex/english-ui  # upcoming 0.4.0; use v0.3.0 for the published source
+git checkout v0.4.0
 python3 -m unittest discover -s . -p 'test*.py'
 swiftc -D BACKEND_TEST -parse-as-library Localization.swift AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o /tmp/HarborBackendTests
 /tmp/HarborBackendTests
