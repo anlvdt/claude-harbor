@@ -8,7 +8,7 @@ from pathlib import Path
 import profile_store as store
 from safe_io import atomic_write, private_dir, fsync_dir
 
-FILES=('profile_store.py','manager.py','desktop_launcher.py','desktop_sync.py','history_inventory.py',
+FILES=('profile_store.py','manager.py','backend_protocol.py','desktop_launcher.py','desktop_sync.py','history_inventory.py',
        'safe_io.py','sync_transaction.py','profile_health.py','verify_coverage.py','clone-entitlements.plist')
 
 DISPATCH = '''#!/usr/bin/env python3

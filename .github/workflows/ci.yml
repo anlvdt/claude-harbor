@@ -1,0 +1,49 @@
+name: macOS CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python tests
+        run: python3 -m unittest discover -s . -p 'test*.py'
+      - name: Swift backend process tests
+        run: |
+          swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/BackendProcessTests.swift -o "$RUNNER_TEMP/BackendProcessTests"
+          "$RUNNER_TEMP/BackendProcessTests"
+          swiftc -D BACKEND_TEST -parse-as-library AccountManager.swift HarborUI.swift AddProfileSheet.swift HistoryUI.swift tests/AddProfileSheetTests.swift -o "$RUNNER_TEMP/AddProfileSheetTests"
+          "$RUNNER_TEMP/AddProfileSheetTests"
+      - name: Build ad-hoc app, verified ZIP and SHA256
+        run: python3 build.py --arch arm64
+      - name: Verify release independently
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from build import VERSION, BUILD_VERSION
+          from verify_release import verify_release
+          verify_release(Path('dist/Claude Harbor.app'), version=VERSION,
+                         build_version=BUILD_VERSION, signature='ad-hoc',
+                         zip_path=Path(f'dist/Claude-Harbor-{VERSION}-macOS-arm64.zip'),
+                         checksum_path=Path(f'dist/Claude-Harbor-{VERSION}-macOS-arm64.zip.sha256'))
+          PY
+      - name: Retain candidate release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claude-Harbor-0.3.0-macOS-arm64-ad-hoc
+          path: |
+            dist/Claude-Harbor-0.3.0-macOS-arm64.zip
+            dist/Claude-Harbor-0.3.0-macOS-arm64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
